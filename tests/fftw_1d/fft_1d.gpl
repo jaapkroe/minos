@@ -1,0 +1,25 @@
+#!/usr/bin/gnuplot
+
+set term pdfcairo enh size 4,2 lw 1.5 dashed
+set output 'fft_1d.pdf'
+
+set xran [0:]
+set xlab "n"
+set ylab "f(n)"
+
+N=system("grep N= fft_1d-data_generatation.sh | sed 's/.*=//g'")+0
+pl 'fft_1d.dat' u 1 w p ls 1 ps .5 not,\
+   'fft_1d.gen' u ($1/(2*pi)*N):2 w l ls 1 dt 1 not,\
+
+set boxwidth 0.2
+set style fill solid 
+
+set key outside above
+set xlab "q"
+set ylab "a_q"
+set lab 1 "f(x) = a_0 + 2{/Symbol S}_{q>0}a_qe^{-iqx}" right at graph .9,.85
+
+pl 'fft_1d.out' u ($1+0.0):2 w boxes ls 2 t 'Re(z)',\
+   'fft_1d.out' u ($1+0.2):3 w boxes ls 4 t 'Im(z)',\
+   'fft_1d.out' u ($1+0.4):(sqrt($2**2+$3**2)) w boxes ls 1 lw 2 t "|z|"
+

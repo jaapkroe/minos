@@ -1,0 +1,58 @@
+#!/usr/bin/gnuplot
+
+set term pdfcairo enh size 4,3.2 lw 1.5 dashed
+set output 'fft_2d.pdf'
+
+set xlab "x"
+set ylab "y"
+set zlab "f(n)"
+set ticslev 0
+
+#set view map
+
+set palette negative defined ( \
+0 '#d73027',\
+1 '#f46d43',\
+2 '#fdae61',\
+3 '#fee090',\
+4 '#e0f3f8',\
+5 '#abd9e9',\
+6 '#74add1',\
+7 '#4575b4')
+
+N1=system("grep N1= fft_2d-data_generatation.sh | sed 's/.*=//g'")+0
+N2=system("grep N2= fft_2d-data_generatation.sh | sed 's/.*=//g'")+0
+set xran [0:N1-1]
+set yran [0:N2-1]
+
+set xtics out
+set ytics out
+
+spl 'fft_2d.dat' u 1:2:3 w pm3d t 'input data'
+spl 'fft_2d.gen' u 1:2:3 w pm3d t 'output data'
+
+
+set xlab "q_x"
+set ylab "q_y"
+set zlab "|a_q|"
+
+set view 60, 30, 1, 1
+
+set boxwidth 1.0
+set style fill solid 1.0
+spl 'fft_2d.out' u 1:2:(sqrt($3**2+$4**2)) w boxes ls 1 t 'fourier coefficients (|a_q|)'
+set style fill solid 1.0
+
+set lmargin at screen 0.15
+set rmargin at screen 0.80
+set bmargin at screen 0.20
+set tmargin at screen 0.90
+
+set palette positive defined (0 "#ffffff", 1 "#9ecae1", 2 "#3182bd", 3 "#000000")
+set logscale cb
+set cbtics format "%g"
+set ylab rotate by 0
+set cblab "|a_q|" offset -1.5,8 rotate by 0
+set view map; 
+spl 'fft_2d.out' u 1:2:(sqrt($3**2+$4**2)) w pm3d not '|a_q|'
+
