@@ -1,6 +1,7 @@
  awk 'BEGIN{
    pi2=2*atan2(0,-1); 
    N=50
+   print "# ",N
    for(i=0;i<N;i++) {
      x=i/N; 
      # some perdiodic function f(i) such that f(0)=f(1)
