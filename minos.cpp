@@ -338,7 +338,7 @@ struct graph {
     for(unsigned j=0;j<3;j++) {
       /* determine maximum box indices */
       f[j] = 1.0/sqrt(_r2max);
-      nmax[j] = (long int)(_cell[j]*f[j]);
+      nmax[j] = int(_cell[j]*f[j])+1;
       if(nmax[j]<3) m1[j]=0; else m1[j]=-1; // for very small cells don't loop too far
       if(nmax[j]<2) m2[j]=0; else m2[j]=1;  // to avoid atoms connected to themselves
       if(nmax[j]>nmaxmax)nmaxmax=nmax[j];
@@ -348,7 +348,9 @@ struct graph {
       /* determine cell for each atom */
       for(unsigned j=0;j<3;j++) {
         double x = fmod(_pos[3*i+j],_cell[j]); // periodic boundary conditions
-        if(x<0) x+=_cell[j];
+        if(_verb>1) fprintf(stderr," x=%f",x);
+        if(x<0)x+=_cell[j];
+        if(_verb>1) fprintf(stderr," x'=%f  x*f = %f\n",x,x*f[j]);
         n[j] = int(x*f[j]);
       }
       nhash = hash(n[0],n[1],n[2],nmaxmax);                     // integer hash of boxnumber
@@ -361,6 +363,7 @@ struct graph {
       /* loop over boxes to find neighbors (erase box after each step) */
       nhash = it1->first;
       unhash(n[0],n[1],n[2],nmaxmax,nhash); // unhash to get indices
+      if(_verb>2) fprintf(stderr,"unhashing %lld  --> (nx,ny,nz) = (%ld,%ld,%ld)\n",nhash,n[0],n[1],n[2]);
       // loop over neighboring boxes
       for(IPREC mx=n[0]+m1[0]; mx<=n[0]+m2[0]; mx++) {
         for(IPREC my=n[1]+m1[1]; my<=n[1]+m2[1]; my++) {
@@ -400,7 +403,7 @@ struct graph {
                       //_v[n1].neigh.push_back(n2);
                       //_v[n2].neigh.push_back(n1);
                     }
-                    if(_verb>2) fprintf(stderr,"%3d <-> %3d : %.2f\n",n1,n2,sqrt(r2));
+                    if(_verb>3) fprintf(stderr,"atoms %3d ... %3d : %.2f\n",n1,n2,sqrt(r2));
                   } // n1!=n2
                 } // jt2-loop
               } // jt1-loop
