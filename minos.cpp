@@ -344,9 +344,13 @@ struct graph {
       if(nmax[j]>nmaxmax)nmaxmax=nmax[j];
       if(_verb) fprintf(stderr,"In direction [%d], #boxes=%ld\n",j,nmax[j]);
     }
-    for(unsigned i=0,k=0;i<_size;i++) {
+    for(unsigned i=0;i<_size;i++) {
       /* determine cell for each atom */
-      for(unsigned j=0;j<3;j++) n[j] = (int(_pos[k++]*f[j])%nmax[j]+nmax[j])%nmax[j];
+      for(unsigned j=0;j<3;j++) {
+        double x = fmod(_pos[3*i+j],_cell[j]); // periodic boundary conditions
+        if(x<0) x+=_cell[j];
+        n[j] = int(x*f[j]);
+      }
       nhash = hash(n[0],n[1],n[2],nmaxmax);                     // integer hash of boxnumber
       it1 = nodemap.find(nhash);                                // check if key exists
       if(it1==nodemap.end()) nodemap[nhash] = vector<int>(1,i); // add new element to map..
@@ -492,7 +496,8 @@ struct graph {
           dx -= round(dx/_cell[k])*_cell[k]; // periodic boundary conditions
           r2 += dx*dx;
         }
-        if(lfile<2) printf (" %s%s %3d %7.3f ",_types[n].c_str(),_types[m].c_str(), m,sqrt(r2));
+        if(lfile<2) printf (" %3d",m);
+        //if(lfile<2) printf (" %3d %7.3f ",m,sqrt(r2));
         if(lfile && n<m) {
           // print average coordinates and bond lengths
           fprintf(file,"%7.3f %7.3f %7.3f    %7.3f\n", 0.5*(_pos[3*n]+_pos[3*m]), 0.5*(_pos[3*n+1]+_pos[3*m+1]), 0.5*(_pos[3*n+2]+_pos[3*m+2]) , sqrt(r2));
