@@ -41,7 +41,7 @@ using namespace lemon;
 using namespace std;
 
 vector<string> elements = {"X","H","He","Li","Be","B","C","N","O","F","Ne","Na","Mg","Al","Si","P","S","Cl","Ar","K","Ca","Sc","Ti","V","Cr","Mn","Fe","Co","Ni","Cu","Zn","Ga","Ge","As","Se","Br","Kr","Rb","Sr","Y","Zr","Nb","Mo","Tc","Ru","Rh","Pd","Ag","Cd","In","Sn","Sb","Te","I","Xe","Cs","Ba","La","Ce","Pr","Nd","Pm","Sm","Eu","Gd","Tb","Dy","Ho","Er","Tm","Yb","Lu","Hf","Ta","W","Re","Os","Ir","Pt","Au","Hg","Tl","Pb","Bi","Po","At","Rn","Fr","Ra","Ac","Th","Pa","U","Np","Pu","Am","Cm","Bk","Cf","Es","Fm","Md","No","Lr","Rf","Db","Sg","Bh","Hs","Mt","Ds","Rg"};
-vector<FPREC> radii = {1.5, 1.2, 1.4, 1.82, 2.0, 1.7, 1.7, 1.7, 1.52, 1.47, 1.54, 1.36, 1.18, 2.0, 2.1, 1.8, 1.8, 2.27, 1.88, 1.76, 1.37, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.63, 1.4, 1.39, 1.07, 2.0, 1.85, 1.9, 1.85, 2.02, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.63, 1.72, 1.58, 1.93, 2.17, 2.0, 2.06, 1.98, 2.16, 2.1, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.72, 1.66, 1.55, 1.96, 2.02, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.86, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0};
+vector<FPREC> radii = {1.5, 1.2, 1.4, 3.40, 2.0, 1.7, 1.7, 1.7, 1.52, 1.47, 1.54, 1.36, 1.18, 2.0, 2.1, 1.8, 1.8, 2.27, 1.88, 1.76, 1.37, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.63, 1.4, 1.39, 1.07, 2.0, 1.85, 1.9, 1.85, 2.02, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.63, 1.72, 1.58, 1.93, 2.17, 2.0, 2.06, 1.98, 2.16, 2.1, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.72, 1.66, 1.55, 1.96, 2.02, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.86, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0};
 
 struct vertex {
   /* the vertex class holds nodes (atoms) with edges (bonds) */
@@ -64,25 +64,28 @@ struct vertex {
 struct graph {
   /* the graph class is the main class of this program
   it defines all relevant functions like ring-search */
-  graph(const char* fname, int verb) : _verb(verb) { // constructor
+  graph(const char* fname, double rcut, int verb) : _verb(verb) { // constructor
     _f.open(fname);
     if(!_f) { printf("ERROR opening file %s\n",fname); exit(1); };
     _cell.resize(3);
     _frame=0;
-    precompute_r2map();
+    precompute_r2map(rcut);
   }
 
   ~graph() {
     _f.close();
   }
 
-  void precompute_r2map() {
+  void precompute_r2map(double rcut) {
     /* compute r^2 cutoff between atom types as geometric mean of the radii */
     unsigned n=elements.size(), i, j;
     r2map.reserve(n);
     for(i=0;i<n;i++) {
       r2map[elements[i]].reserve(n);
-      for(j=0;j<n;j++) r2map[elements[i]][elements[j]] = radii[i] * radii[j];
+      for(j=0;j<n;j++) {
+        if(rcut>0) r2map[elements[i]][elements[j]] = rcut*rcut;
+        else r2map[elements[i]][elements[j]] = radii[i] * radii[j];
+      }
     }
     // @modification possible: here one could modify a bond length, e.g.
     //r2map["C"]["C"]=1.67*1.67;        // rcut = 1.67
@@ -137,10 +140,26 @@ struct graph {
     unordered_map<string, int> map_types_nums;      // map types to a number
     for(i=0;i<_size;i++) {                          // be efficient ...
       getline(_f,line);
+      /* fscanf method */
+      double x,y,z;
+      char t[8];
+      sscanf(line.c_str(),"%s%lf%lf%lf",t,&x,&y,&z);
+      _types.push_back(t);
+      _pos.push_back(x);
+      _pos.push_back(y);
+      _pos.push_back(z);
+      /* fscanf method */
+
+      /* pointer method *
       size_t start = line.find_first_not_of(" \t"); // ignore initial whitespace
       size_t pos = line.find(" ", start);           // ..from there search next space
       char* c = &*(line.begin()+pos+1);             // char*, this pointer will updated to move trough the line
+      _pos.push_back(strtod(c+start, &c));          // pointer c is updated in strtod
+      _pos.push_back(strtod(c, &c));                // fscanf is ~1.5x slower, ifstream >> num is ~3x slower
+      _pos.push_back(strtod(c, NULL));              // we don't care after the last item
       _types.push_back(line.substr(start,pos-start));
+      // pointer method */
+      if(_verb>1) fprintf(stderr,"x[%5d] = [ % 20.16g, % 20.16g, % 20.16g ]\n",i,_pos[3*i],_pos[3*i+1],_pos[3*i+2]);
       /* determine types here to be more efficient later */
       auto res = _typeset.insert(_types[i]);        // returns a pair of <iter,bool>
       if(get<1>(res)) {                             // successful insert,
@@ -155,11 +174,6 @@ struct graph {
       _nodes.push_back(n);
 #endif
       _v[i].id=i;
-      /* perform efficient convert */
-      _pos.push_back(strtod(c+start, &c));          // pointer c is updated in strtod
-      _pos.push_back(strtod(c, &c));                // fscanf is ~1.5x slower, ifstream >> num is ~3x slower
-      _pos.push_back(strtod(c, NULL));              // we don't care after the last item
-      if(_verb>1) fprintf(stderr,"x[%5d] = [ % 20.16g, % 20.16g, % 20.16g ]\n",i,_pos[3*i],_pos[3*i+1],_pos[3*i+2]);
     }
 
     r2mapnum.clear();
@@ -448,8 +462,23 @@ struct graph {
     }
   }
 
+  void stat_coordination(int lfile, int nframe) {
+    FILE *file=NULL;
+    if(lfile) {
+      if(nframe==1) file = fopen("coordination.dat","w");
+      else file = fopen("coordination.dat","a");
+    }
+    for(unsigned i=0; i<_size; i++) {
+      unsigned n = _v[i].id;
+      unsigned nn = _v[i].neigh.size();
+      if(!lfile) printf("%-5d %d\n",n,nn);
+      else fprintf(file,"%d\n",nn);
+    }
+    if(lfile) fclose(file);
+  }
+
   void stat_bondlengths(int lfile) {
-    FILE *file;
+    FILE *file=NULL;
     if(lfile) file = fopen("bonds.dat","w");
     unsigned i,j,k,n,m;
     for(i=0; i<_size; i++) {
@@ -558,7 +587,7 @@ struct graph {
 
   void read_grid_indices() {
     char sname[20] = "sample.xyz";
-    graph s(sname,_verb);
+    graph s(sname,-1,_verb);
     if(s.next()) { fprintf(stderr,"ERROR reading %s\n",sname); exit(1); };
     _nqx=round(s.L(0)/s.rmax()); _nqy=round(s.L(1)/s.rmax());
 
@@ -708,13 +737,14 @@ int main(int argc, char** argv) {
   string usage="usage: minos <options> file.xyz\n\
   \n\
   options are:\n\
-  -a <n>  analysis tool : 1=bond lengths, 2=pyramidalization, 3=normal correlations\n\
+  -a <n>  analysis tool : 1=bond lengths, 2=pyramidalization, 3=coordination, 4=normal correlations\n\
   -f      write analysis data to file\n\
   -c <n>  clusterize defects (defined as rings of size != n)\n\
   -d <n>  ring search depth\n\
   -n <n>  stop after n frames\n\
   -p <n>  print selection (binary code, e.g. 11=1+2+8: 1=neighbors, 2=rings, 4=clusters, 8=chains)\n\
   -r <n>  find rings (criterium: 1=franzblau, 2=king, 3=guttman)\n\
+  -R <x>  set manual cutoff distance (default is hardcoded per specied based on vdW radii)\n\
   -s      search connected subgraphs\n\
   -v      increase verbosity level\n\
   -x      print brief neighboring statistics to stdout\n\
@@ -733,9 +763,11 @@ int main(int argc, char** argv) {
   bool lstat=false; // print statistics
   int  lfile=0;     // print analysis to file (1=yes, 2=only)
   bool lsubg=false; // subgraph detection
+  bool lquiet=false;// be quiet
   int  verbs=0;     // verbosity
+  double rcut=-1;   // manual cutoff
 
-  while ((c = getopt(argc, argv, "a:fc:d:n:p:r:svxh")) != -1) {
+  while ((c = getopt(argc, argv, "a:fc:d:n:p:r:R:svqxh")) != -1) {
     switch(c) {
       case 'a': analysis=atoi(optarg); break;
       case 'f': lfile++; break;
@@ -744,8 +776,10 @@ int main(int argc, char** argv) {
       case 'n': nfrms=atoi(optarg); break;
       case 'p': print=abs(atoi(optarg)); break;
       case 'r': rings=atoi(optarg); break;
+      case 'R': rcut=atof(optarg); break;
       case 's': lsubg=!lsubg; break;
       case 'v': verbs++; break;
+      case 'q': lquiet=!lquiet; break;
       case 'x': lstat=!lstat; break;
       case 'h': fprintf(stderr,"%s",usage.c_str()); return 0;
       default : fprintf(stderr,"%s",usage.c_str()); return 1;
@@ -756,8 +790,8 @@ int main(int argc, char** argv) {
     fprintf(stderr,"# MINOS options: analyze=%d, cluster=%d, depth=%d, print=%d, rings=%d, verbose=%d, stat=%d\n",analysis,clust,depth,print,rings,verbs,lstat);
 
   if(argc-optind<1) {fprintf(stderr,"ERROR: no input file specified.\n"); return 1;};
-  graph g(argv[optind],verbs);      // initialize graph
-  if(analysis==3) g.read_grid_indices();
+  graph g(argv[optind],rcut,verbs);      // initialize graph
+  if(analysis==4) g.read_grid_indices();
 
   while(!g.next()) {   // loop over frames (while not returning an error)
     if(lstat) g.statistics(lfile);   // print statistics
@@ -774,12 +808,13 @@ int main(int argc, char** argv) {
       case 0: break;
       case 1: g.stat_bondlengths(lfile); break;
       case 2: g.stat_pyramidalization(); break;
-      case 3: g.stat_normal_correlation(); break;
+      case 3: g.stat_coordination(lfile,g.frame()); break;
+      case 4: g.stat_normal_correlation(); break;
       default: fprintf(stderr,"ERROR: unimplented analysis method chosen\n"); return 1; break;
     }
   }
 
-  if(analysis==3) g.finish_normal_correlation(); 
+  if(analysis==4) g.finish_normal_correlation(); 
 
   end = clock();
   fprintf(stderr,"CPU time: %.2f sec\n",double(end-start)/CLOCKS_PER_SEC);
