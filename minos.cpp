@@ -515,7 +515,7 @@ struct graph {
       int n = _v[i].id;
       printf("%-3d : ",n);
       double p1=0, p2=0, p3=0, p1p3=0, p1p2=0, p2p3=0, theta_p=0;
-      double r[3][3];
+      double r[3][3]{0};
       for(j=0; j<_v[i].neigh.size(); j++) {
         int m = _v[i].neigh[j]->id;
         for(k=0; k<3; k++) {
