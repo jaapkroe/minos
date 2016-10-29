@@ -27,8 +27,7 @@
 #define DEBUG 0
 #define abs(x) (x<0?-x:x)
 #define FPREC double
-#define IPREC unsigned
-#define HASHTYPE unsigned long long 
+#define int int
 #define BIG 1e8 // big number for cell size
 
 #ifdef HASLEMON
@@ -326,50 +325,52 @@ struct graph {
   void connect() {
     /* this function computes the atom neighbors and turns atom positions into graph 
     connections, the algorithm uses verlet lists with maps for sparse connections */
-    vector<IPREC> n(3), m(3), m1(3), m2(3), nmax(3);    // cell-indices n,m; limits m1,m2=[-1,0,+1],nmax
+    vector<int> n(3), m(3), m1(3), m2(3), nbox(3);    // cell-indices n,m; limits m1,m2=[-1,0,+1],nbox
     FPREC f[3];                                         // cell size fractions
     typedef unordered_map<long int,vector<int> > mymap; // use hashmap
-    HASHTYPE nhash, mhash;                              // hash keywords
+    unsigned long long nhash, mhash;                              // hash keywords
     mymap nodemap;                                      // (sparse storage) map between cell id and array of nodes
     mymap::iterator it1, it2;                           // map iterators
     vector<int>::iterator jt1, jt2;                     // vector iterators
 
     for(unsigned j=0;j<3;j++) {
       /* determine maximum box indices */
-      f[j] = 1.0/sqrt(_r2max);
-      nmax[j] = (IPREC)(_cell[j]*f[j]);
-      if(nmax[j]<3) m1[j]=0; else m1[j]=-1; // for very small cells don't loop too far
-      if(nmax[j]<2) m2[j]=0; else m2[j]=1;  // to avoid atoms connected to themselves
-      if(_verb) fprintf(stderr,"In direction [%d], #boxes=%d\n",j,nmax[j]);
+      double eps = 0.01; // numerical safety margin on box sizes
+      f[j] = 1.0/sqrt(_r2max+eps);
+      nbox[j] = (int)(_cell[j]*f[j]);
+      if(nbox[j]<3) m1[j]=0; else m1[j]=-1; // for very small cells don't loop too far
+      if(nbox[j]<2) m2[j]=0; else m2[j]=1;  // to avoid atoms connected to themselves
+      if(_verb) fprintf(stderr,"In direction [%d], #boxes=%d\n",j,nbox[j]);
     }
+    if(_verb>1) fprintf(stderr,"loop limits : x[%d,%d] ; y[%d,%d] ; z[%d,%d]\n",m1[0],m2[0],m1[1],m2[1],m1[2],m2[2]);
     for(unsigned i=0;i<_size;i++) {
       /* determine cell for each atom */
       for(unsigned j=0;j<3;j++) {
         double x = fmod(_pos[3*i+j],_cell[j]); // periodic boundary conditions
         if(x<0) x+=_cell[j];
         n[j] = int(x*f[j]);
+        if(n[j]==nbox[j] && nbox[j]>0) n[j]--; // merge the last box with the one before it to avoid a tiny last box
       }
       hash(n[0],n[1],n[2],nhash);                     // integer hash of boxnumber
+      if(_verb>1) {
+        unhash(m[0],m[1],m[2],nhash); // unhash to get indices
+        fprintf(stderr,"hashing cell of atom %4d : (%3d,%3d,%3d) --> %12lld --> (%3d,%3d,%3d)\n",i,n[0],n[1],n[2],nhash,m[0],m[1],m[2]);
+      }
       it1 = nodemap.find(nhash);                                // check if key exists
       if(it1==nodemap.end()) nodemap[nhash] = vector<int>(1,i); // add new element to map..
       else nodemap[nhash].push_back(i);                         // ..or push into existing vector
-      if(_verb>1) fprintf(stderr,"cell[%3d] = [%5d,%5d,%5d], hash=%lld\n",i,n[0],n[1],n[2],nhash);
     }
     for(it1 = nodemap.begin(); it1 != nodemap.end(); nodemap.erase(it1++)) {
       /* loop over boxes to find neighbors (erase box after each step) */
       nhash = it1->first;
       unhash(n[0],n[1],n[2],nhash); // unhash to get indices
-      if(_verb>2) fprintf(stderr,"unhashing %lld  --> (nx,ny,nz) = (%d,%d,%d)\n",nhash,n[0],n[1],n[2]);
       // loop over neighboring boxes
-      for(IPREC mx=n[0]+m1[0]; mx<=n[0]+m2[0]; mx++) {
-        for(IPREC my=n[1]+m1[1]; my<=n[1]+m2[1]; my++) {
-          for(IPREC mz=n[2]+m1[2]; mz<=n[2]+m2[2]; mz++) {
-            m[0] = ((mx)%nmax[0]+nmax[0])%nmax[0];                                // positive modulo : mod(x,n) = (x%n+n)%n
-            m[1] = ((my)%nmax[1]+nmax[1])%nmax[1];                                // note, otherwise in C(++) -7%3=-1 !!
-            m[2] = ((mz)%nmax[2]+nmax[2])%nmax[2];
-            //m[0]=mx;
-            //m[1]=my;
-            //m[2]=mz;
+      for(int mx=n[0]+m1[0]; mx<=n[0]+m2[0]; mx++) {
+        for(int my=n[1]+m1[1]; my<=n[1]+m2[1]; my++) {
+          for(int mz=n[2]+m1[2]; mz<=n[2]+m2[2]; mz++) {
+            m[0] = ((mx)%nbox[0]+nbox[0])%nbox[0];                                // positive modulo : mod(x,n) = (x%n+n)%n
+            m[1] = ((my)%nbox[1]+nbox[1])%nbox[1];                                // note, otherwise in C(++) -7%3=-1 !!
+            m[2] = ((mz)%nbox[2]+nbox[2])%nbox[2];
             bool samecell=(n==m);
             if(_verb>2) fprintf(stderr,"cells n<->m = (%u,%u,%u) <-> (%u,%u,%u) [%u]\n",n[0],n[1],n[2],m[0],m[1],m[2],samecell);
             hash(m[0],m[1],m[2],mhash); 
@@ -398,7 +399,7 @@ struct graph {
                       //_v[n1].neigh.push_back(n2);
                       //_v[n2].neigh.push_back(n1);
                     }
-                    if(_verb>3) fprintf(stderr,"atoms %3d ... %3d : %.2f\n",n1,n2,sqrt(r2));
+                    if(_verb>4) fprintf(stderr,"atoms %3d ... %3d : %.2f\n",n1,n2,sqrt(r2));
                   } // n1!=n2
                 } // jt2-loop
               } // jt1-loop
@@ -409,14 +410,14 @@ struct graph {
     } // central box loop
   }
 
-  void hash(IPREC i, IPREC j, IPREC k, HASHTYPE &hash) {
-    HASHTYPE ii(i),jj(j),kk(k);
+  void hash(int i, int j, int k, unsigned long long &hash) {
+    unsigned long long ii(i),jj(j),kk(k);
     // packing three 16-bit integers into a single 48-bit (or 64 in reality) integer
     hash = ( ii ) + ( jj << 16 ) + ( kk << 32 ); 
   }
 
-  void unhash(IPREC &i, IPREC &j, IPREC &k, HASHTYPE hash) {
-    HASHTYPE len = 65535; // 2^16-1 = 0000 ... 0000 1111 1111 1111 1111 (note preceding zeros in 64-bit binary)
+  void unhash(int &i, int &j, int &k, unsigned long long hash) {
+    unsigned long long len = 65535; // 2^16-1 = 0000 ... 0000 1111 1111 1111 1111 (note preceding zeros in 64-bit binary)
     k = ( hash >> 32 ) & len;  // shift right by 32, then take the last 16 digits in binary
     j = ( hash >> 16 ) & len;  // shift right by 16, then take the last 16 digits in binary
     i = hash & len;            // i is simply the last n binary digits
@@ -442,7 +443,7 @@ struct graph {
       ofstream f("neighbors.dat",ios_base::out);
       f << "NEIGH" << endl;
       for(unsigned i=0;i<_size;i++) {
-        f << i << " : ";
+        f << i << " : " ;
         for(unsigned j=0;j<_v[i].neigh.size();j++) {
           f << _v[i].neigh[j]->id << " ";
         }
@@ -473,7 +474,7 @@ struct graph {
     unsigned i,j,k,n,m;
     for(i=0; i<_size; i++) {
       n = _v[i].id;
-      if(lfile<2) printf("%-3d : ",n);
+      if(lfile<2) printf("%-3d : (%ld)",n,_v[i].neigh.size());
       for(j=0; j<_v[i].neigh.size(); j++) {
         m = _v[i].neigh[j]->id;
         double r2 = 0;
