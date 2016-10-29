@@ -328,7 +328,7 @@ struct graph {
     vector<int> n(3), m(3), m1(3), m2(3), nbox(3);    // cell-indices n,m; limits m1,m2=[-1,0,+1],nbox
     FPREC f[3];                                         // cell size fractions
     typedef unordered_map<long int,vector<int> > mymap; // use hashmap
-    unsigned long long nhash, mhash;                              // hash keywords
+    unsigned long long nhash, mhash;                              // 64-bit hash keywords
     mymap nodemap;                                      // (sparse storage) map between cell id and array of nodes
     mymap::iterator it1, it2;                           // map iterators
     vector<int>::iterator jt1, jt2;                     // vector iterators
