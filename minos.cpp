@@ -359,6 +359,7 @@ struct graph {
       /* loop over boxes to find neighbors (erase box after each step) */
       nhash = it1->first;
       unhash(n[0],n[1],n[2],nhash); // unhash to get indices
+      if(_verb>2) fprintf(stderr,"unhashing %lld  --> (nx,ny,nz) = (%d,%d,%d)\n",nhash,n[0],n[1],n[2]);
       // loop over neighboring boxes
       for(IPREC mx=n[0]+m1[0]; mx<=n[0]+m2[0]; mx++) {
         for(IPREC my=n[1]+m1[1]; my<=n[1]+m2[1]; my++) {
@@ -397,7 +398,7 @@ struct graph {
                       //_v[n1].neigh.push_back(n2);
                       //_v[n2].neigh.push_back(n1);
                     }
-                    if(_verb>2) fprintf(stderr,"%3d <-> %3d : %.2f\n",n1,n2,sqrt(r2));
+                    if(_verb>3) fprintf(stderr,"atoms %3d ... %3d : %.2f\n",n1,n2,sqrt(r2));
                   } // n1!=n2
                 } // jt2-loop
               } // jt1-loop
