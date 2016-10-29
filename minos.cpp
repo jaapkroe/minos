@@ -27,8 +27,8 @@
 #define DEBUG 0
 #define abs(x) (x<0?-x:x)
 #define FPREC double
-#define IPREC long int 
-#define HASHTYPE long long int 
+#define IPREC unsigned
+#define HASHTYPE unsigned long long 
 #define BIG 1e8 // big number for cell size
 
 #ifdef HASLEMON
@@ -330,7 +330,6 @@ struct graph {
     FPREC f[3];                                         // cell size fractions
     typedef unordered_map<long int,vector<int> > mymap; // use hashmap
     HASHTYPE nhash, mhash;                              // hash keywords
-    HASHTYPE nmaxmax=0;
     mymap nodemap;                                      // (sparse storage) map between cell id and array of nodes
     mymap::iterator it1, it2;                           // map iterators
     vector<int>::iterator jt1, jt2;                     // vector iterators
@@ -338,11 +337,10 @@ struct graph {
     for(unsigned j=0;j<3;j++) {
       /* determine maximum box indices */
       f[j] = 1.0/sqrt(_r2max);
-      nmax[j] = (long int)(_cell[j]*f[j]);
+      nmax[j] = (IPREC)(_cell[j]*f[j]);
       if(nmax[j]<3) m1[j]=0; else m1[j]=-1; // for very small cells don't loop too far
       if(nmax[j]<2) m2[j]=0; else m2[j]=1;  // to avoid atoms connected to themselves
-      if(nmax[j]>nmaxmax)nmaxmax=nmax[j];
-      if(_verb) fprintf(stderr,"In direction [%d], #boxes=%ld\n",j,nmax[j]);
+      if(_verb) fprintf(stderr,"In direction [%d], #boxes=%d\n",j,nmax[j]);
     }
     for(unsigned i=0;i<_size;i++) {
       /* determine cell for each atom */
@@ -351,16 +349,16 @@ struct graph {
         if(x<0) x+=_cell[j];
         n[j] = int(x*f[j]);
       }
-      nhash = hash(n[0],n[1],n[2],nmaxmax);                     // integer hash of boxnumber
+      hash(n[0],n[1],n[2],nhash);                     // integer hash of boxnumber
       it1 = nodemap.find(nhash);                                // check if key exists
       if(it1==nodemap.end()) nodemap[nhash] = vector<int>(1,i); // add new element to map..
       else nodemap[nhash].push_back(i);                         // ..or push into existing vector
-      if(_verb>1) fprintf(stderr,"cell[%3d] = [%5ld,%5ld,%5ld], hash=%lld\n",i,n[0],n[1],n[2],nhash);
+      if(_verb>1) fprintf(stderr,"cell[%3d] = [%5d,%5d,%5d], hash=%lld\n",i,n[0],n[1],n[2],nhash);
     }
     for(it1 = nodemap.begin(); it1 != nodemap.end(); nodemap.erase(it1++)) {
       /* loop over boxes to find neighbors (erase box after each step) */
       nhash = it1->first;
-      unhash(n[0],n[1],n[2],nmaxmax,nhash); // unhash to get indices
+      unhash(n[0],n[1],n[2],nhash); // unhash to get indices
       // loop over neighboring boxes
       for(IPREC mx=n[0]+m1[0]; mx<=n[0]+m2[0]; mx++) {
         for(IPREC my=n[1]+m1[1]; my<=n[1]+m2[1]; my++) {
@@ -372,9 +370,8 @@ struct graph {
             //m[1]=my;
             //m[2]=mz;
             bool samecell=(n==m);
-            if(_verb>2) fprintf(stderr,"cells n<->m = (%ld,%ld,%ld) <-> (%ld,%ld,%ld) [%d]\n",n[0],n[1],n[2],m[0],m[1],m[2],samecell);
-            //mhash = ((m[0]*nmaxmax)+m[1])*nmaxmax+m[2];                           // integer hash for neighboring box
-            mhash = hash(m[0],m[1],m[2],nmaxmax); 
+            if(_verb>2) fprintf(stderr,"cells n<->m = (%u,%u,%u) <-> (%u,%u,%u) [%u]\n",n[0],n[1],n[2],m[0],m[1],m[2],samecell);
+            hash(m[0],m[1],m[2],mhash); 
             if(samecell) it2 = it1;
             else it2 = nodemap.find(mhash);
             if(it2 != nodemap.end()) {                                            // if box m exists..
@@ -411,30 +408,18 @@ struct graph {
     } // central box loop
   }
 
-  HASHTYPE hash(IPREC i, IPREC j, IPREC k, HASHTYPE n) {
-    //unsigned long long int hash = ((i*n)+j)*n+k; 
-    // direct calculation may cause the implicit 16bit-integers to overflow
-    HASHTYPE hash;
-    hash=i;
-    hash*=n;
-    hash+=j;
-    hash*=n;
-    hash+=k;
-    //printf( "@@ hash = %lld   (%d,%d,%d;  %d)  %d\n",hash,i,j,k,n);
-    return hash;
+  void hash(IPREC i, IPREC j, IPREC k, HASHTYPE &hash) {
+    HASHTYPE ii(i),jj(j),kk(k);
+    // packing three 16-bit integers into a single 48-bit (or 64 in reality) integer
+    hash = ( ii ) + ( jj << 16 ) + ( kk << 32 ); 
   }
 
-  void unhash(IPREC& i, IPREC& j, IPREC& k, HASHTYPE n, HASHTYPE hash) {
-    HASHTYPE tmp=hash;
-    k=tmp%n;
-    tmp-=k;
-    HASHTYPE tmp2=tmp/n;
-    tmp2=tmp2%n;
-    j=tmp2;
-    tmp=(tmp-j*n)/n;
-    i=tmp/n;
+  void unhash(IPREC &i, IPREC &j, IPREC &k, HASHTYPE hash) {
+    HASHTYPE len = 65535; // 2^16-1 = 0000 ... 0000 1111 1111 1111 1111 (note preceding zeros in 64-bit binary)
+    k = ( hash >> 32 ) & len;  // shift right by 32, then take the last 16 digits in binary
+    j = ( hash >> 16 ) & len;  // shift right by 16, then take the last 16 digits in binary
+    i = hash & len;            // i is simply the last n binary digits
   }
-
 
   void statistics(int lfile) {
     double nnav = 0;
