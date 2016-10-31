@@ -37,7 +37,7 @@ void read2(string name) {
   char c[16];
   string s;
   FILE* f=fopen(name.c_str(),"r");
-  while(fscanf(f,"%s%lf%lf%lf",&c,&num,&num,&num)!=EOF) {
+  while(fscanf(f,"%s%lf%lf%lf",c,&num,&num,&num)!=EOF) {
     s = c;
     check+=num;
   }

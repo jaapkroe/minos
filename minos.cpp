@@ -734,7 +734,7 @@ int main(int argc, char** argv) {
   options are:\n\
   -a <n>  analysis tool : 1=bond lengths, 2=pyramidalization, 3=coordination, 4=normal correlations\n\
   -f      write analysis data to file\n\
-  -F      read file using fscanf method instead of pointer logic (perhaps more stable in some cases)\n\
+  -F      read file using fscanf method instead of pointer logic (fscanf may be more stable in some cases, pointer method is ~40\% faster)\n\
   -c <n>  clusterize defects (defined as rings of size != n)\n\
   -d <n>  ring search depth\n\
   -n <n>  stop after n frames\n\
