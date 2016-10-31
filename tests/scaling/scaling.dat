@@ -1,0 +1,16 @@
+2000        CPU time: 0.01 sec
+4000        CPU time: 0.02 sec
+8000        CPU time: 0.03 sec
+16000       CPU time: 0.05 sec
+32000       CPU time: 0.11 sec
+64000       CPU time: 0.23 sec
+128000      CPU time: 0.54 sec
+256000      CPU time: 1.18 sec
+512000      CPU time: 2.48 sec
+1024000     CPU time: 5.03 sec
+2048000     CPU time: 10.70 sec
+4096000     CPU time: 21.83 sec
+8192000     CPU time: 44.68 sec
+16384000    CPU time: 94.45 sec
+32768000    CPU time: 205.60 sec
+65536000    

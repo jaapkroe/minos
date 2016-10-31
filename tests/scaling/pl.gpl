@@ -1,0 +1,26 @@
+#!/usr/bin/gnuplot
+
+set term pdfcairo enh size 3,2 lw 2
+set output "scaling.pdf"
+
+set fit quiet
+set tmargin 2
+set rmargin 1
+
+set title "neighbouring N particles" offset 0,-0.5
+set xlab "N"
+set ylab "t (sec)" offset 2,0
+set xtics 1e3,10,1e8 nomirror
+set key top left
+
+f(x) = f0 + f1*x
+g(x) = g0 + g1*x*log(x)
+
+fit f(x) 'scaling.dat' u 1:4 via f0,f1
+fit g(x) 'scaling.dat' u 1:4 via g0,g1
+
+set logscale xy
+
+pl 'scaling.dat' u 1:4 w p ls 1 ps .6 not,\
+     f(x)-f0 t 'N' ls 2,\
+     g(x)-g0 t "N log(N)" ls 4

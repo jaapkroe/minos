@@ -28,7 +28,7 @@
 #define abs(x) (x<0?-x:x)
 #define FPREC double
 #define int int
-#define BIG 1e8 // big number for cell size
+#define BIG 2e6 // big number for cell size ~ 2^21 
 
 #ifdef HASLEMON
 //#define GR SmartGraph
@@ -153,11 +153,16 @@ struct graph {
         /* pointer method */
         size_t start = line.find_first_not_of(" \t"); // ignore initial whitespace
         size_t pos = line.find(" ", start);           // ..from there search next space
-        char* c = &*(line.begin()+pos  );             // char*, this pointer will updated to move trough the line
-        _pos.push_back(strtod(c+start, &c));          // pointer c is updated in strtod
+        char *c = &*(line.begin()+pos+1);             // char*, this pointer will updated to move trough the line
+        if(_verb) fprintf(stderr,"    XXXX start,pos = %lu,%lu : \'%s\'    line=\'%s\'\n",start,pos,c,line.c_str());
+        _pos.push_back(strtod(c+start, &c));          // from first non-whitespace to next whitespace (pointer c is updated in strtod)
+        if(_verb) fprintf(stderr,"    XXXX start,pos = %lu,%lu : \'%s\'\n",start,pos,c);
         _pos.push_back(strtod(c, &c));                // fscanf is ~1.5x slower, ifstream >> num is ~3x slower
+        if(_verb) fprintf(stderr,"    XXXX start,pos = %lu,%lu : \'%s\'\n",start,pos,c);
         _pos.push_back(strtod(c, NULL));              // we don't care after the last item
         _types.push_back(line.substr(start,pos-start));
+        //line.erase(0,start); // trim the white space at start
+        //line.erase(pos);     // trim only to the first word that you want...
         // pointer method */
       }
       
@@ -340,7 +345,16 @@ struct graph {
       /* determine maximum box indices */
       double eps = 0.01; // numerical safety margin on box sizes
       f[j] = 1.0/sqrt(_r2max+eps);
-      nbox[j] = (int)(_cell[j]*f[j]);
+      unsigned long long nbox_long = (unsigned long long)(_cell[j]*f[j]);
+      unsigned long long nbox_limit = 2097151; // 2^21-1;
+      if(nbox_long > nbox_limit || nbox_long > numeric_limits<unsigned>::max()) { 
+        fprintf(stderr,"WARNING : cell dimension too large for cutoff for efficient hashing :\n");
+        fprintf(stderr,"          nbox=%llu, hash limit=%llu, integer limit=%u\n",nbox_long,nbox_limit,numeric_limits<unsigned>::max()); 
+        unsigned nbox_max = numeric_limits<unsigned>::max() < nbox_limit ? numeric_limits<unsigned>::max()-1 : nbox_limit-1;
+        f[j] = nbox_max / _cell[j];
+        nbox_long = (unsigned long long)(_cell[j]*f[j]);
+      }
+      nbox[j] = (int)(nbox_long);
       if(nbox[j]<3) m1[j]=0; else m1[j]=-1; // for very small cells don't loop too far
       if(nbox[j]<2) m2[j]=0; else m2[j]=1;  // to avoid atoms connected to themselves
       if(_verb) fprintf(stderr,"In direction [%d], #boxes=%d\n",j,nbox[j]);
@@ -357,7 +371,7 @@ struct graph {
       hash(n[0],n[1],n[2],nhash);                     // integer hash of boxnumber
       if(_verb>1) {
         unhash(m[0],m[1],m[2],nhash); // unhash to get indices
-        fprintf(stderr,"hashing cell of atom %4d : (%3d,%3d,%3d) --> %12lld --> (%3d,%3d,%3d)\n",i,n[0],n[1],n[2],nhash,m[0],m[1],m[2]);
+        fprintf(stderr,"hashing cell of atom %4d : (%7u,%7u,%7u) --> %20llu --> (%7u,%7u,%7u)\n",i,n[0],n[1],n[2],nhash,m[0],m[1],m[2]);
       }
       it1 = nodemap.find(nhash);                                // check if key exists
       if(it1==nodemap.end()) nodemap[nhash] = vector<int>(1,i); // add new element to map..
@@ -415,14 +429,14 @@ struct graph {
 
   void hash(int i, int j, int k, unsigned long long &hash) {
     unsigned long long ii(i),jj(j),kk(k);
-    // packing three 16-bit integers into a single 48-bit (or 64 in reality) integer
-    hash = ( ii ) + ( jj << 16 ) + ( kk << 32 ); 
+    // packing three 21-bit integers into a 63 bits (a 64-bit integer)
+    hash = ( ii ) + ( jj << 21 ) + ( kk << 42 ); 
   }
 
   void unhash(int &i, int &j, int &k, unsigned long long hash) {
-    unsigned long long len = 65535; // 2^16-1 = 0000 ... 0000 1111 1111 1111 1111 (note preceding zeros in 64-bit binary)
-    k = ( hash >> 32 ) & len;  // shift right by 32, then take the last 16 digits in binary
-    j = ( hash >> 16 ) & len;  // shift right by 16, then take the last 16 digits in binary
+    unsigned long long len = 2097151; // 2^21-1 = 1 1111 1111 1111 1111 1111  (twenty-one 'ones')
+    k = ( hash >> 42 ) & len;  // shift right by 42, then take the last 21 digits in binary
+    j = ( hash >> 21 ) & len;  // shift right by 21, then take the last 21 digits in binary
     i = hash & len;            // i is simply the last n binary digits
   }
 
@@ -761,14 +775,14 @@ int main(int argc, char** argv) {
   bool lsubg=false; // subgraph detection
   bool lquiet=false;// be quiet
   int  verbs=0;     // verbosity
-  int  readmethod=0;// fscanf or pointer logic
+  int  readmethod=1;// fscanf or pointer logic
   double rcut=-1;   // manual cutoff
 
   while ((c = getopt(argc, argv, "a:fFc:d:n:p:r:R:svqxh")) != -1) {
     switch(c) {
       case 'a': analysis=atoi(optarg); break;
       case 'f': lfile++; break;
-      case 'F': readmethod=1; break;
+      case 'F': readmethod=1-readmethod; break;
       case 'c': clust=atoi(optarg); break;
       case 'd': depth=atoi(optarg); break;
       case 'n': nfrms=atoi(optarg); break;
