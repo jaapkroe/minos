@@ -63,7 +63,7 @@ struct vertex {
 struct graph {
   /* the graph class is the main class of this program
   it defines all relevant functions like ring-search */
-  graph(const char* fname, double rcut, int verb) : _verb(verb) { // constructor
+  graph(const char* fname, double rcut, int verb, int readmethod) : _verb(verb), _readmethod(readmethod) { // constructor
     _f.open(fname);
     if(!_f) { printf("ERROR opening file %s\n",fname); exit(1); };
     _cell.resize(3);
@@ -139,25 +139,27 @@ struct graph {
     unordered_map<string, int> map_types_nums;      // map types to a number
     for(i=0; i<_size; i++) {                        // be efficient ...
       getline(_f,line);
-      /* fscanf method *
-      double x,y,z;
-      char t[8];
-      sscanf(line.c_str(),"%s%lf%lf%lf",t,&x,&y,&z);
-      _types.push_back(t);
-      _pos.push_back(x);
-      _pos.push_back(y);
-      _pos.push_back(z);
-      // fscanf method */
-
-      /* pointer method */
-      size_t start = line.find_first_not_of(" \t"); // ignore initial whitespace
-      size_t pos = line.find(" ", start);           // ..from there search next space
-      char* c = &*(line.begin()+pos  );             // char*, this pointer will updated to move trough the line
-      _pos.push_back(strtod(c+start, &c));          // pointer c is updated in strtod
-      _pos.push_back(strtod(c, &c));                // fscanf is ~1.5x slower, ifstream >> num is ~3x slower
-      _pos.push_back(strtod(c, NULL));              // we don't care after the last item
-      _types.push_back(line.substr(start,pos-start));
-      // pointer method */
+      if(_readmethod==1) { 
+        /* fscanf method */
+        double x,y,z;
+        char t[8];
+        sscanf(line.c_str(),"%s%lf%lf%lf",t,&x,&y,&z);
+        _types.push_back(t);
+        _pos.push_back(x);
+        _pos.push_back(y);
+        _pos.push_back(z);
+        // fscanf method */
+      } else { 
+        /* pointer method */
+        size_t start = line.find_first_not_of(" \t"); // ignore initial whitespace
+        size_t pos = line.find(" ", start);           // ..from there search next space
+        char* c = &*(line.begin()+pos  );             // char*, this pointer will updated to move trough the line
+        _pos.push_back(strtod(c+start, &c));          // pointer c is updated in strtod
+        _pos.push_back(strtod(c, &c));                // fscanf is ~1.5x slower, ifstream >> num is ~3x slower
+        _pos.push_back(strtod(c, NULL));              // we don't care after the last item
+        _types.push_back(line.substr(start,pos-start));
+        // pointer method */
+      }
       
       if(_verb>0) fprintf(stderr,"x[%5d] = [ % 20.16g, % 20.16g, % 20.16g ]\n",i,_pos[3*i],_pos[3*i+1],_pos[3*i+2]);
       /* determine types here to be more efficient later */
@@ -580,7 +582,7 @@ struct graph {
 
   void read_grid_indices() {
     char sname[20] = "sample.xyz";
-    graph s(sname,-1,_verb);
+    graph s(sname,-1,_verb,0);
     if(s.next()) { fprintf(stderr,"ERROR reading %s\n",sname); exit(1); };
     _nqx=round(s.L(0)/s.rmax()); _nqy=round(s.L(1)/s.rmax());
 
@@ -711,7 +713,7 @@ struct graph {
     vector<int> _typesnum;            // numeric version of atom types
     unordered_set<string> _typeset;
     unsigned _size;
-    int _frame, _verb;
+    int _frame, _verb, _readmethod;
     ifstream _f;
     FPREC _r2max;                      // maximum r^2[A][B] value for loaded types
     unordered_map<string,unordered_map<string,FPREC> > r2map;  // precomputed r^2[A][B] cutoffs
@@ -732,6 +734,7 @@ int main(int argc, char** argv) {
   options are:\n\
   -a <n>  analysis tool : 1=bond lengths, 2=pyramidalization, 3=coordination, 4=normal correlations\n\
   -f      write analysis data to file\n\
+  -F      read file using fscanf method instead of pointer logic (perhaps more stable in some cases)\n\
   -c <n>  clusterize defects (defined as rings of size != n)\n\
   -d <n>  ring search depth\n\
   -n <n>  stop after n frames\n\
@@ -758,12 +761,14 @@ int main(int argc, char** argv) {
   bool lsubg=false; // subgraph detection
   bool lquiet=false;// be quiet
   int  verbs=0;     // verbosity
+  int  readmethod=0;// fscanf or pointer logic
   double rcut=-1;   // manual cutoff
 
-  while ((c = getopt(argc, argv, "a:fc:d:n:p:r:R:svqxh")) != -1) {
+  while ((c = getopt(argc, argv, "a:fFc:d:n:p:r:R:svqxh")) != -1) {
     switch(c) {
       case 'a': analysis=atoi(optarg); break;
       case 'f': lfile++; break;
+      case 'F': readmethod=1; break;
       case 'c': clust=atoi(optarg); break;
       case 'd': depth=atoi(optarg); break;
       case 'n': nfrms=atoi(optarg); break;
@@ -783,12 +788,12 @@ int main(int argc, char** argv) {
     fprintf(stderr,"# MINOS options: analyze=%d, cluster=%d, depth=%d, print=%d, rings=%d, verbose=%d, stat=%d\n",analysis,clust,depth,print,rings,verbs,lstat);
 
   if(argc-optind<1) {fprintf(stderr,"ERROR: no input file specified.\n"); return 1;};
-  graph g(argv[optind],rcut,verbs);      // initialize graph
+  graph g(argv[optind],rcut,verbs,readmethod);      // initialize graph
   if(analysis==4) g.read_grid_indices();
 
   while(!g.next()) {   // loop over frames (while not returning an error)
     if(lstat) g.statistics(lfile);   // print statistics
-    else cout << "frame " << g.frame() << endl;
+    else if(!lquiet) cout << "frame " << g.frame() << endl;
 #ifdef HASLEMON
     if(rings==1) g.lemon_franzblau();  // find rings
     if(rings==2) g.lemon_king();       // find rings
