@@ -79,9 +79,9 @@ struct graph {
     /* compute r^2 cutoff between atom types as geometric mean of the radii */
     unsigned n=elements.size(), i, j;
     r2map.reserve(n);
-    for(i=0;i<n;i++) {
+    for(i=0; i<n; i++) {
       r2map[elements[i]].reserve(n);
-      for(j=0;j<n;j++) {
+      for(j=0; j<n; j++) {
         if(rcut>0) r2map[elements[i]][elements[j]] = rcut*rcut;
         else r2map[elements[i]][elements[j]] = radii[i] * radii[j];
       }
@@ -122,7 +122,7 @@ struct graph {
     _v.resize(_size);
     getline(_f,line);                               // second header cell (treat with care)
     stringstream ss(line);
-    for(unsigned i=0;i<3;i++) {
+    for(unsigned i=0; i<3; i++) {
       if(!(ss>>_cell[i])) {                         // if no cell was found we set it to very big
         _cell[0]=BIG; _cell[1]=BIG; _cell[2]=BIG;
         break;
@@ -137,9 +137,9 @@ struct graph {
     if(_verb) fprintf(stderr,"CELL = { %20.16g, %20.16g, %20.16g }\n",_cell[0],_cell[1],_cell[2]);
     unsigned ntypes=0, i;
     unordered_map<string, int> map_types_nums;      // map types to a number
-    for(i=0;i<_size;i++) {                          // be efficient ...
+    for(i=0; i<_size; i++) {                        // be efficient ...
       getline(_f,line);
-      /* fscanf method */
+      /* fscanf method *
       double x,y,z;
       char t[8];
       sscanf(line.c_str(),"%s%lf%lf%lf",t,&x,&y,&z);
@@ -147,18 +147,19 @@ struct graph {
       _pos.push_back(x);
       _pos.push_back(y);
       _pos.push_back(z);
-      /* fscanf method */
+      // fscanf method */
 
-      /* pointer method *
+      /* pointer method */
       size_t start = line.find_first_not_of(" \t"); // ignore initial whitespace
       size_t pos = line.find(" ", start);           // ..from there search next space
-      char* c = &*(line.begin()+pos+1);             // char*, this pointer will updated to move trough the line
+      char* c = &*(line.begin()+pos  );             // char*, this pointer will updated to move trough the line
       _pos.push_back(strtod(c+start, &c));          // pointer c is updated in strtod
       _pos.push_back(strtod(c, &c));                // fscanf is ~1.5x slower, ifstream >> num is ~3x slower
       _pos.push_back(strtod(c, NULL));              // we don't care after the last item
       _types.push_back(line.substr(start,pos-start));
       // pointer method */
-      if(_verb>1) fprintf(stderr,"x[%5d] = [ % 20.16g, % 20.16g, % 20.16g ]\n",i,_pos[3*i],_pos[3*i+1],_pos[3*i+2]);
+      
+      if(_verb>0) fprintf(stderr,"x[%5d] = [ % 20.16g, % 20.16g, % 20.16g ]\n",i,_pos[3*i],_pos[3*i+1],_pos[3*i+2]);
       /* determine types here to be more efficient later */
       auto res = _typeset.insert(_types[i]);        // returns a pair of <iter,bool>
       if(get<1>(res)) {                             // successful insert,
@@ -427,7 +428,7 @@ struct graph {
     double nnav = 0;
     unsigned i, len;
     vector<int> hist(3);
-    for(i=0;i<_size;i++) {
+    for(i=0; i<_size; i++) {
       len = _v[i].neigh.size();
       //int len = countOutArcs(_g,_nodes[i]);
       nnav += len;
@@ -436,15 +437,15 @@ struct graph {
     }
     printf("%4d %.4f : ",_frame,nnav/double(_size));
     //printf("%4d %.4f : ",_frame,countArcs(_g)/double(countNodes(_g)));
-    for(i=0;i<hist.size();i++) printf("%6d ",hist[i]);
+    for(i=0; i<hist.size(); i++) printf("%6d ",hist[i]);
     printf("\n");
 
     if(lfile) {
       ofstream f("neighbors.dat",ios_base::out);
       f << "NEIGH" << endl;
-      for(unsigned i=0;i<_size;i++) {
+      for(unsigned i=0; i<_size; i++) {
         f << i << " : " ;
-        for(unsigned j=0;j<_v[i].neigh.size();j++) {
+        for(unsigned j=0;j<_v[i].neigh.size(); j++) {
           f << _v[i].neigh[j]->id << " ";
         }
         f << endl;
