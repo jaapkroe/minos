@@ -1,16 +1,9 @@
-2000        CPU time: 0.01 sec
-4000        CPU time: 0.02 sec
-8000        CPU time: 0.03 sec
-16000       CPU time: 0.05 sec
-32000       CPU time: 0.11 sec
-64000       CPU time: 0.23 sec
-128000      CPU time: 0.54 sec
-256000      CPU time: 1.18 sec
-512000      CPU time: 2.48 sec
-1024000     CPU time: 5.03 sec
-2048000     CPU time: 10.70 sec
-4096000     CPU time: 21.83 sec
-8192000     CPU time: 44.68 sec
-16384000    CPU time: 94.45 sec
-32768000    CPU time: 205.60 sec
-65536000    
+1           CPU-time: 0.00116 sec, Total-time: 0.00115 sec
+8           CPU-time: 0.00126 sec, Total-time: 0.00126 sec
+64          CPU-time: 0.00136 sec, Total-time: 0.00135 sec
+512         CPU-time: 0.00230 sec, Total-time: 0.00229 sec
+4096        CPU-time: 0.00884 sec, Total-time: 0.00883 sec
+32768       CPU-time: 0.06250 sec, Total-time: 0.06249 sec
+262144      CPU-time: 0.52305 sec, Total-time: 0.52294 sec
+2097152     CPU-time: 4.56883 sec, Total-time: 4.56800 sec
+16777216    CPU-time: 39.65788 sec, Total-time: 39.65550 sec

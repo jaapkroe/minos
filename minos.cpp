@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <getopt.h>
 #include <iostream>
+#include <unistd.h>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -9,6 +10,7 @@
 #include <queue>
 #include <unordered_set>
 #include <unordered_map>
+#include <map>
 #include <limits>                 // numeric_limits
 #include <ctime>
 #include <cmath>                  // round, sqrt
@@ -26,9 +28,9 @@
 #define MAXLINEW numeric_limits<std::streamsize>::max()
 #define DEBUG 0
 #define abs(x) (x<0?-x:x)
-#define FPREC double
 #define int int
 #define BIG 2e6 // big number for cell size ~ 2^21 
+#define _POSIX_C_SOURCE 200809L
 
 #ifdef HASLEMON
 //#define GR SmartGraph
@@ -40,7 +42,7 @@ using namespace lemon;
 using namespace std;
 
 vector<string> elements = {"X","H","He","Li","Be","B","C","N","O","F","Ne","Na","Mg","Al","Si","P","S","Cl","Ar","K","Ca","Sc","Ti","V","Cr","Mn","Fe","Co","Ni","Cu","Zn","Ga","Ge","As","Se","Br","Kr","Rb","Sr","Y","Zr","Nb","Mo","Tc","Ru","Rh","Pd","Ag","Cd","In","Sn","Sb","Te","I","Xe","Cs","Ba","La","Ce","Pr","Nd","Pm","Sm","Eu","Gd","Tb","Dy","Ho","Er","Tm","Yb","Lu","Hf","Ta","W","Re","Os","Ir","Pt","Au","Hg","Tl","Pb","Bi","Po","At","Rn","Fr","Ra","Ac","Th","Pa","U","Np","Pu","Am","Cm","Bk","Cf","Es","Fm","Md","No","Lr","Rf","Db","Sg","Bh","Hs","Mt","Ds","Rg"};
-vector<FPREC> radii = {1.5, 1.2, 1.4, 3.40, 2.0, 1.7, 1.7, 1.7, 1.52, 1.47, 1.54, 1.36, 1.18, 2.0, 2.1, 1.8, 1.8, 2.27, 1.88, 1.76, 1.37, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.63, 1.4, 1.39, 1.07, 2.0, 1.85, 1.9, 1.85, 2.02, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.63, 1.72, 1.58, 1.93, 2.17, 2.0, 2.06, 1.98, 2.16, 2.1, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.72, 1.66, 1.55, 1.96, 2.02, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.86, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0};
+vector<float> radii = {1.5, 1.2, 1.4, 3.40, 2.0, 1.7, 1.7, 1.7, 1.52, 1.47, 1.54, 1.36, 1.18, 2.0, 2.1, 1.8, 1.8, 2.27, 1.88, 1.76, 1.37, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.63, 1.4, 1.39, 1.07, 2.0, 1.85, 1.9, 1.85, 2.02, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.63, 1.72, 1.58, 1.93, 2.17, 2.0, 2.06, 1.98, 2.16, 2.1, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.72, 1.66, 1.55, 1.96, 2.02, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.86, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0};
 
 struct vertex {
   /* the vertex class holds nodes (atoms) with edges (bonds) */
@@ -184,7 +186,7 @@ struct graph {
     }
 
     r2mapnum.clear();
-    for(unsigned i=0;i<=ntypes;i++) r2mapnum.push_back(vector<FPREC>(ntypes+1));
+    for(unsigned i=0;i<=ntypes;i++) r2mapnum.push_back(vector<float>(ntypes+1));
     for(auto it=_typeset.begin(); it!=_typeset.end(); ++it ) {
       int i = map_types_nums[*it];
       if(find(elements.begin(),elements.end(),*it)==elements.end()) {
@@ -192,7 +194,7 @@ struct graph {
       }
       for(auto jt=_typeset.begin(); jt!=_typeset.end(); ++jt ) {
         int j = map_types_nums[*jt];
-        FPREC r2 = r2map[*it][*jt];
+        float r2 = r2map[*it][*jt];
         if(r2>_r2max)_r2max=r2;
         r2mapnum[i][j] = r2;
         if(_verb) fprintf(stderr, "cutoff radius r[%s,%s]=%.2f\n",(*it).c_str(),jt->c_str(),sqrt(r2));
@@ -334,15 +336,16 @@ struct graph {
     /* this function computes the atom neighbors and turns atom positions into graph 
     connections, the algorithm uses verlet lists with maps for sparse connections */
     vector<int> n(3), m(3), m1(3), m2(3), nbox(3);    // cell-indices n,m; limits m1,m2=[-1,0,+1],nbox
-    FPREC f[3];                                         // cell size fractions
+    float f[3];                                         // cell size fractions
     typedef unordered_map<long int,vector<int> > mymap; // use hashmap
+    //typedef map<long int,vector<int> > mymap; // use hashmap
     unsigned long long nhash, mhash;                              // 64-bit hash keywords
     mymap nodemap;                                      // (sparse storage) map between cell id and array of nodes
     mymap::iterator it1, it2;                           // map iterators
     vector<int>::iterator jt1, jt2;                     // vector iterators
 
     for(unsigned j=0;j<3;j++) {
-      /* determine maximum box indices */
+      // determine maximum box indices
       double eps = 0.01; // numerical safety margin on box sizes
       f[j] = 1.0/sqrt(_r2max+eps);
       unsigned long long nbox_long = (unsigned long long)(_cell[j]*f[j]);
@@ -361,7 +364,7 @@ struct graph {
     }
     if(_verb>1) fprintf(stderr,"loop limits : x[%d,%d] ; y[%d,%d] ; z[%d,%d]\n",m1[0],m2[0],m1[1],m2[1],m1[2],m2[2]);
     for(unsigned i=0;i<_size;i++) {
-      /* determine cell for each atom */
+      // determine cell for each atom 
       for(unsigned j=0;j<3;j++) {
         double x = fmod(_pos[3*i+j],_cell[j]); // periodic boundary conditions
         if(x<0) x+=_cell[j];
@@ -373,12 +376,14 @@ struct graph {
         unhash(m[0],m[1],m[2],nhash); // unhash to get indices
         fprintf(stderr,"hashing cell of atom %4d : (%7u,%7u,%7u) --> %20llu --> (%7u,%7u,%7u)\n",i,n[0],n[1],n[2],nhash,m[0],m[1],m[2]);
       }
-      it1 = nodemap.find(nhash);                                // check if key exists
+      //it1 = nodemap.find(nhash);                                // check if key exists
+      it1 = nodemap.begin();
       if(it1==nodemap.end()) nodemap[nhash] = vector<int>(1,i); // add new element to map..
       else nodemap[nhash].push_back(i);                         // ..or push into existing vector
     }
+
     for(it1 = nodemap.begin(); it1 != nodemap.end(); nodemap.erase(it1++)) {
-      /* loop over boxes to find neighbors (erase box after each step) */
+      // loop over boxes to find neighbors (erase box after each step) 
       nhash = it1->first;
       unhash(n[0],n[1],n[2],nhash); // unhash to get indices
       // loop over neighboring boxes
@@ -398,10 +403,10 @@ struct graph {
                 for(jt2 = it2->second.begin(); jt2 != it2->second.end(); jt2++) { // jt2-loop (particles in box m)
                   int n1=*jt1, n2=*jt2;
                   if((!samecell&&(n1!=n2)) || (samecell&&(n1<n2))) {              // different cell or n1<n2 (lower half)..
-                    FPREC r2 = 0.;                                                // bond distance squared
-                    FPREC r2cut = r2mapnum[_typesnum[n1]][_typesnum[n2]];         // r^2 cutoff depending on atom types
+                    float r2 = 0.;                                                // bond distance squared
+                    float r2cut = r2mapnum[_typesnum[n1]][_typesnum[n2]];         // r^2 cutoff depending on atom types
                     for(unsigned j=0, j1=3*n1, j2 =3*n2; j<3; j++, j1++, j2++) {
-                      FPREC dx = _pos[j1]-_pos[j2];
+                      float dx = _pos[j1]-_pos[j2];
                       dx -= round(dx/_cell[j])*_cell[j];                          // periodic boundary conditions
                       r2 += dx*dx;
                       if(r2>r2cut) break;
@@ -710,8 +715,6 @@ struct graph {
     }
   }
 
-
-
   inline int frame() { return _frame; }
 
   private:
@@ -721,7 +724,7 @@ struct graph {
     // for the grid mapping use a reference structure (sample.xyz)
     // e.g.
     // awk 'NR>2{print NR-3,$0}' sample.xyz | sort -k 3,3n -k 4,4n | awk '{print $1}' > sample.indices
-    vector<FPREC> _pos, _cell;
+    vector<float> _pos, _cell;
     vector<vertex> _v;                // internal storage of vertices
     vector<string> _types;            // atom types
     vector<int> _typesnum;            // numeric version of atom types
@@ -729,9 +732,9 @@ struct graph {
     unsigned _size;
     int _frame, _verb, _readmethod;
     ifstream _f;
-    FPREC _r2max;                      // maximum r^2[A][B] value for loaded types
-    unordered_map<string,unordered_map<string,FPREC> > r2map;  // precomputed r^2[A][B] cutoffs
-    vector<vector<FPREC> > r2mapnum;   // precomputed r^2[A][B] cutoffs
+    float _r2max;                      // maximum r^2[A][B] value for loaded types
+    unordered_map<string,unordered_map<string,float> > r2map;  // precomputed r^2[A][B] cutoffs
+    vector<vector<float> > r2mapnum;   // precomputed r^2[A][B] cutoffs
 #ifdef HASLEMON
     GR _g;
     vector<GR::Node> _nodes;
@@ -740,9 +743,14 @@ struct graph {
 
 int main(int argc, char** argv) {
   clock_t start, end;
+  struct timespec spec;
+  time_t s_start, s_end;
+  long ns_start, ns_end;
   char c;
 
   start = clock();
+  clock_gettime(CLOCK_MONOTONIC, &spec);
+  s_start  = spec.tv_sec; ns_start = spec.tv_nsec;
   string usage="usage: minos <options> file.xyz\n\
   \n\
   options are:\n\
@@ -829,5 +837,8 @@ int main(int argc, char** argv) {
   if(analysis==4) g.finish_normal_correlation(); 
 
   end = clock();
-  fprintf(stderr,"CPU time: %.2f sec\n",double(end-start)/CLOCKS_PER_SEC);
+  clock_gettime(CLOCK_MONOTONIC, &spec);
+  s_end = spec.tv_sec; ns_end = spec.tv_nsec;
+  fprintf(stderr,"CPU-time: %.5f sec, Total-time: %.5f sec\n",
+        double(end-start)/CLOCKS_PER_SEC, (double) (s_end-s_start) + (double)(ns_end-ns_start)/1e9);
 }
