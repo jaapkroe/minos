@@ -16,7 +16,7 @@ set key top left
 set xran [1e4:]
 set yran [1e-2:]
 
-t0=0.0+system("awk 'NR==1{print $3}' scaling.dat")
+t0=0.0+system("sort -nk3 scaling.dat | awk 'NR==1{print $3}' ")
 
 f2=0.001
 f(x) = t0 + f1*x + f2*x**2

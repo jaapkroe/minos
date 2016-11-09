@@ -15,25 +15,12 @@
 #include <cmath>                  // round, sqrt
 #include <algorithm>
 #include <fftw3.h>
-#ifdef HASLEMON
-#include <lemon/smart_graph.h>
-#include <lemon/list_graph.h>
-#include <lemon/dijkstra.h>
-#include <lemon/bfs.h>
-#endif
 
 #define BONDS 3 // estimate number of bonds to reduce malloc calls (no problem if _v grows larger)
 #define MAXLINEW numeric_limits<std::streamsize>::max()
 #define DEBUG 0
 #define abs(x) (x<0?-x:x)
 #define BIG 2e6 // big number for cell size ~ 2^21 
-
-#ifdef HASLEMON
-//#define GR SmartGraph
-//#define GR SmartDigraph
-#define GR ListDigraph
-using namespace lemon;
-#endif
 
 using namespace std;
 
@@ -42,20 +29,10 @@ vector<float> radii = {1.5, 1.2, 1.4, 3.40, 2.0, 1.7, 1.7, 1.7, 1.52, 1.47, 1.54
 
 struct vertex {
   /* the vertex class holds nodes (atoms) with edges (bonds) */
-  //vertex() {size=0;}
-  vertex() {neigh.reserve(BONDS);}
-  vertex(const vertex& other) { 
-    for(unsigned i=0;i<other.neigh.size(); i++) 
-      neigh.push_back(other.neigh[i]);
-    id = other.id;
-  }
-  //vector<int> neigh;
+  vertex() { neigh.reserve(BONDS); } // constructor
   vector<vertex*> neigh;
-  //int neigh[BONDS];
-  //int size;
-  double normal[3];
-  int dist, id;
-  bool ingraph;
+  vector<double> normal;
+  int id;
 };
 
 struct graph {
@@ -86,16 +63,10 @@ struct graph {
     }
     // @modification possible: here one could modify a bond length, e.g.
     //r2map["C"]["C"]=1.67*1.67;        // rcut = 1.67
-    //r2map["B"]["B"]=pow(1.45,2);      // rcut = 1.45
-    //r2map["B"]["N"]=2.50;             // rcut = 1.58
     //r2map["N"]["B"]=r2map["B"]["N"];  // symmetrize
   }
 
   int next() {               // read next frame
-#ifdef HASLEMON
-    _g.clear();
-    _nodes.clear();
-#endif
     _v.clear();
     _typeset.clear();
     _r2max=0;
@@ -112,11 +83,6 @@ struct graph {
     _types.clear();                                 // clear vectors
     _pos.clear();
     _typesnum.clear();
-#ifdef HASLEMON
-    //_g.reserveEdge(BONDS*_size);
-    _g.reserveNode(_size);
-    _g.reserveArc(BONDS*_size);                     // expect 3 arcs per node
-#endif
     _v.resize(_size);
     getline(_f,line);                               // second header cell (treat with care)
     stringstream ss(line);
@@ -148,15 +114,12 @@ struct graph {
         _pos.push_back(z);
         // fscanf method */
       } else { 
-        /* pointer method */
+        /* pointer method (BROKEN!) */
         size_t start = line.find_first_not_of(" \t"); // ignore initial whitespace
         size_t pos = line.find(" ", start);           // ..from there search next space
         char *c = &*(line.begin()+pos+1);             // char*, this pointer will updated to move trough the line
-        if(_verb) fprintf(stderr,"    XXXX start,pos = %lu,%lu : \'%s\'    line=\'%s\'\n",start,pos,c,line.c_str());
         _pos.push_back(strtod(c+start, &c));          // from first non-whitespace to next whitespace (pointer c is updated in strtod)
-        if(_verb) fprintf(stderr,"    XXXX start,pos = %lu,%lu : \'%s\'\n",start,pos,c);
         _pos.push_back(strtod(c, &c));                // fscanf is ~1.5x slower, ifstream >> num is ~3x slower
-        if(_verb) fprintf(stderr,"    XXXX start,pos = %lu,%lu : \'%s\'\n",start,pos,c);
         _pos.push_back(strtod(c, NULL));              // we don't care after the last item
         _types.push_back(line.substr(start,pos-start));
         //line.erase(0,start); // trim the white space at start
@@ -173,11 +136,6 @@ struct graph {
       } else {                                      // no successful insert, key exists
         _typesnum.push_back(map_types_nums[_types[i]]);
       }
-#ifdef HASLEMON
-      /* add one more node to lemon graph */ 
-      GR::Node n = _g.addNode();
-      _nodes.push_back(n);
-#endif
       _v[i].id=i;
     }
 
@@ -197,135 +155,6 @@ struct graph {
       }
     }
     return 0;
-  }
-
-  
-  void king() { 
-    //vector<vertex> v(_v); // make a copy of vertex-list, copy-constructor is automatic ... OR IS IT?
-    //vector<vertex> v;
-    //for(int i=0;i<_v.size();i++) { v.push_back(_v[i]); }
-    for(auto vit=_v.begin(); vit!=_v.end(); _v.erase(vit++)) {        // loop over all nodes (remove when done)
-      //if(_verb) printf("BFS: vertex \n");
-      auto& n = vit->neigh;
-      for(auto vjt=_v.begin(); vjt!=_v.end(); vjt++) vjt->ingraph=true;   // reset visitors
-      //for(int i=0; i<_v.size(); i++) _v[i].ingraph=true;
-      auto jit=n.begin();
-      //printf("INGRAPH %d,%d   %d\n" ,_v[0].ingraph,_v[1].ingraph,(*jit)->ingraph);
-      //printf("INGRAPH v id    %d\n" ,_v[0].ingraph,_v[1].ingraph,(*jit)->ingraph);
-      //break;
-      unsigned s = n.size();
-      for(unsigned j=0; j<s; j++) {           // loop over all neighbors
-        auto save = *jit; 
-        n.erase(jit);                           // remove arc i->j
-        //printf("v/save in graph ?? = %d, %d\n",vit->ingraph,save->ingraph);
-        int success = bfs(*vit,*save,7);        // perform search from v[i]->v[j]
-        if(success) printf("cycle found %d<->%d at dist=%d\n",vit->id,save->id,success);
-        else printf("no cycle (%d,%d)\n",vit->id,save->id);
-        n.push_back(save);                      // reset arc i->j
-      }
-    }
-    return;
-  }
-
-  int bfs(vertex& root, vertex& target, int maxdepth) {
-    /* breadth-first search : root->target */
-    //printf("bfs: %d [nn=%d] -> %d   ingraphs=(%d,%d)\n",root.id,root.neigh.size(),target.id,root.ingraph,target.ingraph);
-    //*
-    root.dist = 0;
-    queue<vertex*> Q; //({root});
-    //printf("push root %d dist set to %d\n",root.id,root.dist);
-    Q.push(&root);
-    printf("\n  root=%d... ",root.id);
-    while(!Q.empty()) {
-      auto v = Q.front(); 
-      printf(" -> %d[%d]",v->id,v->dist);
-      Q.pop();
-      //printf("popped vertex %d at distance %d [in search for %d]\n",v->id,v->dist,target.id);
-      if(v->dist>maxdepth) return 0;
-      if(v==&target) return v->dist;
-      //if(v.id==target.id) return v.dist;
-      //printf("popped vertex %d at distance %d [in search for %d]\n",v->id,v->dist,target.id);
-      for(unsigned i=0; i<v->neigh.size(); i++) { //vertex* nit=v.neigh.begin(); nit!=v.neigh.end(); nit++) {
-        auto n = v->neigh[i];
-        //printf("... neighbor %d , id=%d [ingraph=%d]\n",i,n->id,n->ingraph);
-        if(n->ingraph) {
-          n->ingraph=false;
-          n->dist=v->dist+1;
-          Q.push(n);
-        }
-      }
-    }
-    //*/
-    return 0;
-  };
-
-#ifdef HASLEMON
-  int lemon_king() { 
-    /* king's criterium ring search using the lemon library */
-    Bfs<GR> bfs(_g);
-    GR::NodeMap<int> dist(_g);
-    GR::ArcMap<bool> len(_g,true);
-    for(unsigned i=0; i<_size; i++) {
-      printf("i=%d\n",i);
-      auto s=_nodes[i]; // source
-      int j=0;
-      for (ListDigraph::ArcIt a(_g); a != INVALID; ++a) {
-        printf("j=%d\n",j++);
-        _g.reverseArc(a);
-        auto t(_g.oppositeNode(s,a));
-        //auto t=_nodes[_v[i].neigh[j]->id];
-        bfs.run(s,t);
-        _g.reverseArc(a);
-        //_g.addArc(s,t);
-        //s.neigh.push_back(*t);
-      }
-      _g.erase(s);
-    }
-  }
-#endif
-
-
-#ifdef HASLEMON
-  int lemon_franzblau() {
-    if(DEBUG) printf("lemon_franzblau\n");
-    Bfs<GR> bfs(_g);
-    
-    /* ring search using the shortest-path criterion */
-    GR::NodeMap<int> dist(_g);
-    GR::ArcMap<bool> len(_g);
-    bfs.init();
-    //for (GR::NodeIt nit(_g); nit!=INVALID; ++nit) ++count;
-    //GR::ArcMap<int> length(_g);
-    /*
-    Dijkstra<GR> dijkstra(_g,length);
-    dijkstra.distMap(dist);
-    GR::Node s = _nodes[0];
-    GR::Node t = _nodes[0];
-    //dijkstra.init();
-    //dijkstra.addSource(s,10);
-    //dijkstra.run();
-    //dijkstra.start();
-    //dijkstra.run(_nodes[0]);
-    for(int i=0;i<_size;i++) {
-    //dijkstra.addSource(s,10);
-    }
-     // dijkstra.run(_nodes[i]);
-    //for(int i=0;i<_size;i++)
-    //  printf("%i ", dist[_nodes[i]]);
-    //printf("\n");
-    //Path<GR> p = dijkstra.path(t);
-    */
-    return 5;
-  }
-#endif
-
-  int subgraphs() {
-    /* detect disconnect subgraphs */
-    return 5;
-  }
-  int shells(int i) {
-    /* find neighbor shells from atom index i */
-    return 5;
   }
 
   void connect() {
@@ -367,7 +196,7 @@ struct graph {
         n[j] = int(x*f[j]);
         if(n[j]==nbox[j] && nbox[j]>0) n[j]--; // merge the last box with the one before it to avoid a tiny last box
       }
-      hash(n[0],n[1],n[2],nhash);                     // integer hash of boxnumber
+      hash(n[0],n[1],n[2],nhash);              // integer hash of boxnumber
       if(_verb>1) {
         unhash(m[0],m[1],m[2],nhash); // unhash to get indices
         fprintf(stderr,"hashing cell of atom %4d : (%7u,%7u,%7u) --> %20llu --> (%7u,%7u,%7u)\n",i,n[0],n[1],n[2],nhash,m[0],m[1],m[2]);
@@ -407,16 +236,10 @@ struct graph {
                       if(r2>r2cut) break;
                     }
                     if(r2<r2cut) {                                                // neighbors if smaller than cutoff
-#ifdef HASLEMON
-                      GR::Arc a = _g.addArc(_nodes[n1],_nodes[n2]);
-                      GR::Arc b = _g.addArc(_nodes[n2],_nodes[n1]);
-#endif
                       _v[n1].neigh.push_back(&_v[n2]);
                       _v[n2].neigh.push_back(&_v[n1]);
-                      //_v[n1].neigh.push_back(n2);
-                      //_v[n2].neigh.push_back(n1);
                     }
-                    if(_verb>4) fprintf(stderr,"atoms %3d ... %3d : %.2f\n",n1,n2,sqrt(r2));
+                    //if(_verb>4) fprintf(stderr,"atoms %3d ... %3d : %.2f\n",n1,n2,sqrt(r2));
                   } // n1!=n2
                 } // jt2-loop
               } // jt1-loop
@@ -446,13 +269,11 @@ struct graph {
     vector<int> hist(3);
     for(i=0; i<_size; i++) {
       len = _v[i].neigh.size();
-      //int len = countOutArcs(_g,_nodes[i]);
       nnav += len;
       if(len>hist.size()-1) hist.resize(len+1);
       hist[len]++;
     }
     printf("%4d %.4f : ",_frame,nnav/double(_size));
-    //printf("%4d %.4f : ",_frame,countArcs(_g)/double(countNodes(_g)));
     for(i=0; i<hist.size(); i++) printf("%6d ",hist[i]);
     printf("\n");
 
@@ -501,9 +322,7 @@ struct graph {
           r2 += dx*dx;
         }
         if(lfile<2) printf (" %3d",m);
-        //if(lfile<2) printf (" %3d %7.3f ",m,sqrt(r2));
-        if(lfile && n<m) {
-          // print average coordinates and bond lengths
+        if(lfile && n<m) { // print average coordinates and bond lengths
           fprintf(file,"%7.3f %7.3f %7.3f    %7.3f\n", 0.5*(_pos[3*n]+_pos[3*m]), 0.5*(_pos[3*n+1]+_pos[3*m+1]), 0.5*(_pos[3*n+2]+_pos[3*m+2]) , sqrt(r2));
         }
       }
@@ -539,7 +358,7 @@ struct graph {
       p1=sqrt(p1); p2=sqrt(p2); p3=sqrt(p3);
 
       // compute Haddon's pyramidalization angle
-      // [R. C. Haddon, J. Am. Chem. Soc., 1997, 119, 1797]
+      // [R. C. Haddon, J. Am. Chem. Soc. 119, 1797 (1997)]
       double dM11 = r[0][0]*(r[1][1]*r[2][2]-r[1][2]*r[2][1]) 
                   - r[1][0]*(r[0][1]*r[2][2]-r[0][2]*r[2][1]) 
                   + r[2][0]*(r[0][1]*r[1][2]-r[0][2]*r[1][1]);
@@ -557,16 +376,6 @@ struct graph {
         double R=sqrt(x0*x0+y0*y0+z0*z0); // sphere radius
         double theta_sp = acos(dot_xr0/(R*p1))*180./M_PI;
         theta_p = 90 - theta_sp;
-
-        /* this alternative method to compute theta_p does not work
-        // [T.P. Radhakrishnan and I. Agranat, Struct. Chem. Vol. 2, 19107 (1990)] 
-        // sin(alpha) = p1.p3 / sqrt(p1^2*p3^2)... sin(alpa/2) = sin(0.5*asin(sin(alpha)))
-        double a = p1p3/(p1*p3); a=sin(0.5*asin(a));
-        double b = p1p2/(p1*p2); b=sin(0.5*asin(b));
-        double c = p2p3/(p2*p3); c=sin(0.5*asin(c));
-        double sin_theta_sp = 2*a*b*c / sqrt(2*a*a*b*b + 2*a*a*c*c + 2*b*b*c*c - pow(a,4) - pow(b,4) - pow(c,4));
-        double theta_p      = asin(sin_theta_sp)*180/M_PI;
-        */
       }
 
       printf ("theta_p = %6.2f\n",theta_p);
@@ -638,8 +447,8 @@ struct graph {
       // obtain regularized grid point for this atom
       int j = grid_indices[i];
       // store data
-      in[2*j]   = _v[i].normal[0];
-      in[2*j+1] = _v[i].normal[1];
+      //in[2*j]   = _v[i].normal[0];
+      //in[2*j+1] = _v[i].normal[1];
       //
       in[2*j] = _pos[2*i];
       in[2*j+1] = _pos[2*i+1];
@@ -665,11 +474,12 @@ struct graph {
      */
     unsigned i,j,k,d;
     double r1[3], r2[3], norm1,norm2;
-    double *n;
+    vector<double> n;
     for(i=0; i<_size; i++) {
       int numneigh = _v[i].neigh.size();
       double numnorm = 0;
       n = _v[i].normal;
+      n.resize(3);
       for(d=0; d<3; d++) n[d]=0;
       if(numneigh<2) continue;
       int ni = _v[i].id;
@@ -716,8 +526,7 @@ struct graph {
     int _nqx, _nqy; 
     fftw_complex *FFT;
     vector<int> grid_indices; // real space mapping of atoms regular grid 
-    // for the grid mapping use a reference structure (sample.xyz)
-    // e.g.
+    // for the grid mapping use a reference structure (sample.xyz), e.g.
     // awk 'NR>2{print NR-3,$0}' sample.xyz | sort -k 3,3n -k 4,4n | awk '{print $1}' > sample.indices
     vector<float> _pos, _cell;
     vector<vertex> _v;                // internal storage of vertices
@@ -730,10 +539,6 @@ struct graph {
     float _r2max;                      // maximum r^2[A][B] value for loaded types
     unordered_map<string,unordered_map<string,float> > r2map;  // precomputed r^2[A][B] cutoffs
     vector<vector<float> > r2mapnum;   // precomputed r^2[A][B] cutoffs
-#ifdef HASLEMON
-    GR _g;
-    vector<GR::Node> _nodes;
-#endif
 };
 
 int main(int argc, char** argv) {
@@ -752,13 +557,9 @@ int main(int argc, char** argv) {
   -a <n>  analysis tool : 1=bond lengths, 2=pyramidalization, 3=coordination, 4=normal correlations\n\
   -f      write analysis data to file\n\
   -F      read file using fscanf method instead of pointer logic (fscanf may be more stable in some cases, pointer method is ~40\% faster)\n\
-  -c <n>  clusterize defects (defined as rings of size != n)\n\
-  -d <n>  ring search depth\n\
   -n <n>  stop after n frames\n\
   -p <n>  print selection (binary code, e.g. 11=1+2+8: 1=neighbors, 2=rings, 4=clusters, 8=chains)\n\
-  -r <n>  find rings (criterium: 1=franzblau, 2=king, 3=guttman)\n\
   -R <x>  set manual cutoff distance (default is hardcoded per specied based on vdW radii)\n\
-  -s      search connected subgraphs\n\
   -v      increase verbosity level\n\
   -x      print brief neighboring statistics to stdout\n\
   -h      show this help message\n\
@@ -768,31 +569,23 @@ int main(int argc, char** argv) {
   Guttman     : all shortest paths between root and neighbor\n";
 
   int  analysis=0;  // analysis tool
-  int  clust=0;     // clusterize
-  int  depth=7;     // ring search depth
   int  nfrms=0;     // max frame
-  int  rings=0;     // ring search (1=franzblau, 2=king, 3=guttman)
   int  print=0;     // print selection 
   bool lstat=false; // print statistics
   int  lfile=0;     // print analysis to file (1=yes, 2=only)
-  bool lsubg=false; // subgraph detection
   bool lquiet=false;// be quiet
   int  verbs=0;     // verbosity
   int  readmethod=1;// fscanf or pointer logic
   double rcut=-1;   // manual cutoff
 
-  while ((c = getopt(argc, argv, "a:fFc:d:n:p:r:R:svqxh")) != -1) {
+  while ((c = getopt(argc, argv, "a:fFn:p:R:vqxh")) != -1) {
     switch(c) {
       case 'a': analysis=atoi(optarg); break;
       case 'f': lfile++; break;
       case 'F': readmethod=1-readmethod; break;
-      case 'c': clust=atoi(optarg); break;
-      case 'd': depth=atoi(optarg); break;
       case 'n': nfrms=atoi(optarg); break;
       case 'p': print=abs(atoi(optarg)); break;
-      case 'r': rings=atoi(optarg); break;
       case 'R': rcut=atof(optarg); break;
-      case 's': lsubg=!lsubg; break;
       case 'v': verbs++; break;
       case 'q': lquiet=!lquiet; break;
       case 'x': lstat=!lstat; break;
@@ -802,7 +595,7 @@ int main(int argc, char** argv) {
   }
 
   if(verbs)
-    fprintf(stderr,"# MINOS options: analyze=%d, cluster=%d, depth=%d, print=%d, rings=%d, verbose=%d, stat=%d\n",analysis,clust,depth,print,rings,verbs,lstat);
+    fprintf(stderr,"# MINOS options: analyze=%d, print=%d, verbose=%d, stat=%d\n",analysis,print,verbs,lstat);
 
   if(argc-optind<1) {fprintf(stderr,"ERROR: no input file specified.\n"); return 1;};
   graph g(argv[optind],rcut,verbs,readmethod);      // initialize graph
@@ -811,13 +604,6 @@ int main(int argc, char** argv) {
   while(!g.next()) {   // loop over frames (while not returning an error)
     if(lstat) g.statistics(lfile);   // print statistics
     else if(!lquiet) cout << "frame " << g.frame() << endl;
-#ifdef HASLEMON
-    if(rings==1) g.lemon_franzblau();  // find rings
-    if(rings==2) g.lemon_king();       // find rings
-#else
-    if(rings==2) g.king();       // find rings
-#endif
-    if(lsubg) g.subgraphs();    // find subgraphs
     if(nfrms && g.frame()>=nfrms) break;
     switch(analysis) {
       case 0: break;
