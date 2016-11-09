@@ -1,36 +1,32 @@
+#include <unistd.h>
 #include <vector>
 #include <stdio.h>
 #include <getopt.h>
 #include <iostream>
-#include <unistd.h>
 #include <fstream>
 #include <sstream>
 #include <string>
-#include <set>
 #include <queue>
 #include <unordered_set>
 #include <unordered_map>
 #include <map>
 #include <limits>                 // numeric_limits
-#include <ctime>
+#include <ctime>                  // clock
 #include <cmath>                  // round, sqrt
 #include <algorithm>
-#include "fftw3.h"
+#include <fftw3.h>
 #ifdef HASLEMON
 #include <lemon/smart_graph.h>
 #include <lemon/list_graph.h>
 #include <lemon/dijkstra.h>
 #include <lemon/bfs.h>
 #endif
-#include <ctime>                  // clock
 
 #define BONDS 3 // estimate number of bonds to reduce malloc calls (no problem if _v grows larger)
 #define MAXLINEW numeric_limits<std::streamsize>::max()
 #define DEBUG 0
 #define abs(x) (x<0?-x:x)
-#define int int
 #define BIG 2e6 // big number for cell size ~ 2^21 
-#define _POSIX_C_SOURCE 200809L
 
 #ifdef HASLEMON
 //#define GR SmartGraph
@@ -337,8 +333,8 @@ struct graph {
     connections, the algorithm uses verlet lists with maps for sparse connections */
     vector<int> n(3), m(3), m1(3), m2(3), nbox(3);    // cell-indices n,m; limits m1,m2=[-1,0,+1],nbox
     float f[3];                                         // cell size fractions
-    typedef unordered_map<long int,vector<int> > mymap; // use hashmap
-    //typedef map<long int,vector<int> > mymap; // use hashmap
+    typedef unordered_map<unsigned long long,vector<int> > mymap; // use hashmap
+    //typedef map<unsigned long long,vector<int> > mymap; // use hashmap
     unsigned long long nhash, mhash;                              // 64-bit hash keywords
     mymap nodemap;                                      // (sparse storage) map between cell id and array of nodes
     mymap::iterator it1, it2;                           // map iterators
@@ -376,8 +372,7 @@ struct graph {
         unhash(m[0],m[1],m[2],nhash); // unhash to get indices
         fprintf(stderr,"hashing cell of atom %4d : (%7u,%7u,%7u) --> %20llu --> (%7u,%7u,%7u)\n",i,n[0],n[1],n[2],nhash,m[0],m[1],m[2]);
       }
-      //it1 = nodemap.find(nhash);                                // check if key exists
-      it1 = nodemap.begin();
+      it1 = nodemap.find(nhash);                                // check if key exists
       if(it1==nodemap.end()) nodemap[nhash] = vector<int>(1,i); // add new element to map..
       else nodemap[nhash].push_back(i);                         // ..or push into existing vector
     }
@@ -839,6 +834,6 @@ int main(int argc, char** argv) {
   end = clock();
   clock_gettime(CLOCK_MONOTONIC, &spec);
   s_end = spec.tv_sec; ns_end = spec.tv_nsec;
-  fprintf(stderr,"CPU-time: %.5f sec, Total-time: %.5f sec\n",
+  fprintf(stderr,"CPU-time: %.4f sec, Total-time: %.4f sec\n",
         double(end-start)/CLOCKS_PER_SEC, (double) (s_end-s_start) + (double)(ns_end-ns_start)/1e9);
 }
