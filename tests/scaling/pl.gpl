@@ -5,7 +5,7 @@ set output "scaling.pdf"
 
 set fit quiet
 
-set title "neighboring N particles" offset 0,-0.5
+#set title "neighboring N particles" offset 0,-0.5
 set xlab "N"
 set ylab "t (sec)"
 set xtics 1,10,1e8 format "10^{%L}" nomirror
@@ -30,7 +30,8 @@ fit h(x) 'scaling.dat' u 1:3 via h1
 set logscale xy
 
 pl 'scaling.dat' u 1:3 w p ls 1 ps .5 not,\
-     f(x) t 'N' ls 1,\
+   'scaling-highdensity.dat' u 1:3 w p ls 1 lc rgb "#777777" ps .5 not,\
+     f(x) t 'N' ls 2,\
      g(x) t "N log(N)" ls 4 dt 1,\
      h(x) t "N^2" ls 3 dt 1
 
