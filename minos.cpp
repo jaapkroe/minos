@@ -16,12 +16,10 @@
 #include <algorithm>
 #include <fftw3.h>
 
-#define BONDS 3 // typical number of bonds for vector reservation (no problem if vectors grow beyond this limit)
+#define BONDS 3 // estimate number of bonds for vector reservation
 #define MAXLINEW numeric_limits<std::streamsize>::max()
-#define DEBUG 0
 #define abs(x) (x<0?-x:x)
 #define BIG 2e6 // big number for cell size ~ 2^21
-
 using namespace std;
 
 vector<string> elements = {"X","H","He","Li","Be","B","C","N","O","F","Ne","Na","Mg","Al","Si","P","S","Cl","Ar","K","Ca","Sc","Ti","V","Cr","Mn","Fe","Co","Ni","Cu","Zn","Ga","Ge","As","Se","Br","Kr","Rb","Sr","Y","Zr","Nb","Mo","Tc","Ru","Rh","Pd","Ag","Cd","In","Sn","Sb","Te","I","Xe","Cs","Ba","La","Ce","Pr","Nd","Pm","Sm","Eu","Gd","Tb","Dy","Ho","Er","Tm","Yb","Lu","Hf","Ta","W","Re","Os","Ir","Pt","Au","Hg","Tl","Pb","Bi","Po","At","Rn","Fr","Ra","Ac","Th","Pa","U","Np","Pu","Am","Cm","Bk","Cf","Es","Fm","Md","No","Lr","Rf","Db","Sg","Bh","Hs","Mt","Ds","Rg"};
@@ -31,14 +29,13 @@ struct vertex {
   /* the vertex class holds nodes (atoms) with edges (bonds) */
   vertex() { neigh.reserve(BONDS); } // constructor
   vector<vertex*> neigh;
-  //vector<double> normal;
   int id;
 };
 
 struct graph {
   /* the graph class is the main class of this program
   it defines all relevant functions like ring-search */
-  graph(const char* fname, double rcut, int verb, int readmethod) : _verb(verb), _readmethod(readmethod) { // constructor
+  graph(const char* fname, double rcut, int verb) : _verb(verb) { // constructor
     _f.open(fname);
     if(!_f) { printf("ERROR opening file %s\n",fname); exit(1); };
     _cell.resize(3);
@@ -80,7 +77,6 @@ struct graph {
     string line;
     if(!(_f >> _size)) return 1;                    // read num of atoms (error=EOF!)
     _f.ignore(MAXLINEW, '\n');                      // go to end-of-line
-    //_types.clear; _types.reserve(_size);
     _pos.clear();      _pos.reserve(3*_size); // memory will be filled by push_back
     _typesnum.clear(); _typesnum.reserve(_size);
     _v.clear();        _v.resize(_size); // allocate directly
@@ -103,30 +99,18 @@ struct graph {
     unordered_map<string, int> map_types_nums;      // map types to a number
     char t[8];
     double x,y,z;
-    for(i=0; i<_size; i++) {                        // be efficient ...
+    for(i=0; i<_size; i++) {                        // read coordinates
       getline(_f,line);
-      if(_readmethod==1) { /* fscanf method */
-        sscanf(line.c_str(),"%s%lf%lf%lf",t,&x,&y,&z);
-      } else {            /* pointer method (BROKEN!) */
-        size_t start = line.find_first_not_of(" \t"); // ignore initial whitespace
-        size_t pos = line.find(" ", start);           // ..from there search next space
-        char *c = &*(line.begin()+pos+1);             // char*, this pointer will updated to move trough the line
-        string ts = line.substr(start,pos+1);
-        // _types.push_back(ts);
-        x = strtod(c+start, &c);          // from first non-whitespace to next whitespace (pointer c is updated in strtod)
-        y = strtod(c, &c);                // fscanf is ~1.5x slower, ifstream >> num is ~3x slower
-        z = strtod(c, NULL);              // we don't care after the last item
-      }
-      //_types.push_back(t);
+      sscanf(line.c_str(),"%s%lf%lf%lf",t,&x,&y,&z);
       _pos.push_back(x); _pos.push_back(y); _pos.push_back(z);
 
-      if(_verb>0) fprintf(stderr,"x[%5d] = [ % 20.16g, % 20.16g, % 20.16g ]\n",i,_pos[3*i],_pos[3*i+1],_pos[3*i+2]);
-      /* determine types here to be more efficient later */
+      if(_verb>0) fprintf(stderr,"x[%5d] = [ % 20.16g % 20.16g % 20.16g ]\n",i,_pos[3*i],_pos[3*i+1],_pos[3*i+2]);
+      /* determine unique types */
       auto res = _typeset.insert(t);        // returns a pair of <iter,bool>
-      if(get<1>(res)) {                             // successful insert,
-        _typesnum.push_back(ntypes);                // set numeric types
+      if(get<1>(res)) {                     // successful insert,
+        _typesnum.push_back(ntypes);        // set numeric types
         map_types_nums[t]=ntypes++;         // map: types <-> numeric types
-      } else {                                      // no successful insert, key exists
+      } else {                              // no successful insert, key exists
         _typesnum.push_back(map_types_nums[t]);
       }
       _v[i].id=i;
@@ -153,17 +137,16 @@ struct graph {
   void connect() {
     /* this function computes the atom neighbors and turns atom positions into graph
     connections, the algorithm uses verlet lists with maps for sparse connections */
-    vector<int> n(3), m(3), m1(3), m2(3), nbox(3);    // cell-indices n,m; limits m1,m2=[-1,0,+1],nbox
-    float f[3];                                         // cell size fractions
+    vector<int> n(3), m(3), m1(3), m2(3), nbox(3);                  // cell-indices n,m; limits m1,m2=[-1,0,+1],nbox
+    float f[3];                                                     // cell size fractions
     typedef unordered_map<unsigned long long,vector<int> > hashmap; // hashmap
-    unsigned long long nhash, mhash;                              // 64-bit hash keywords
-    hashmap nodemap;                                      // (sparse storage) map between cell id and array of nodes
-    hashmap::iterator it1, it2;                           // map iterators
-    vector<int>::iterator jt1, jt2;                     // vector iterators
+    unsigned long long nhash, mhash;                                // 64-bit hash keywords
+    hashmap nodemap;                                                // (sparse storage) map between cell id and array of nodes
+    hashmap::iterator it1, it2;                                     // map iterators
+    vector<int>::iterator jt1, jt2;                                 // vector iterators
 
-    for(unsigned j=0;j<3;j++) {
-      // determine maximum box indices
-      double eps = 0.01; // numerical safety margin on box sizes
+    for(unsigned j=0;j<3;j++) {     // determine maximum box indices
+      double eps = 0.01;            // numerical safety margin on box size
       f[j] = 1.0/sqrt(_r2max+eps);
       unsigned long long nbox_long = (unsigned long long)(_cell[j]*f[j]);
       unsigned long long nbox_limit = 2097151; // 2^21-1;
@@ -181,8 +164,7 @@ struct graph {
       if(_verb) fprintf(stderr,"In direction [%d], #boxes=%d\n",j,nbox[j]);
     }
     if(_verb>1) fprintf(stderr,"loop limits : x[%d,%d] ; y[%d,%d] ; z[%d,%d]\n",m1[0],m2[0],m1[1],m2[1],m1[2],m2[2]);
-    for(unsigned i=0;i<_size;i++) {
-      // determine cell for each atom
+    for(unsigned i=0;i<_size;i++) {            // determine cell for each atom
       for(unsigned j=0;j<3;j++) {
         double x = fmod(_pos[3*i+j],_cell[j]); // periodic boundary conditions
         if(x<0) x+=_cell[j];
@@ -276,7 +258,6 @@ struct graph {
       for(unsigned i=0; i<_size; i++) {
         f << i << " : " ;
         for(auto vj=_v[i].neigh.begin(); vj!=_v[i].neigh.end(); vj++) {
-          // j=0;j<_v[i].neigh.size(); j++) {
           f << (*vj)->id << " ";
         }
         f << endl;
@@ -308,8 +289,6 @@ struct graph {
       n = _v[i].id;
       if(lfile<2) printf("%-3d : (%ld)",n,_v[i].neigh.size());
       for(auto vj=_v[i].neigh.begin(); vj!= _v[i].neigh.end(); vj++) {
-        //j=0; j<_v[i].neigh.size(); j++) {
-        //m = _v[i].neigh[j]->id;
         m = (*vj)->id;
         double r2 = 0;
         for(d=0; d<3; d++) {
@@ -335,8 +314,6 @@ struct graph {
       printf("%-3d : ",n);
       double p1=0, p2=0, p3=0, p1p3=0, p1p2=0, p2p3=0, theta_p=0;
       double r[3][3]{0};
-      //for(j=0; j<_v[i].neigh.size(); j++) {
-      //  int m = _v[i].neigh[j]->id;
       int j=0;
       for(auto vj=_v[i].neigh.begin(); vj!= _v[i].neigh.end(); vj++, j++) {
         int m = (*vj)->id;
@@ -404,7 +381,7 @@ struct graph {
 
   void read_grid_indices() {
     char sname[20] = "sample.xyz";
-    graph s(sname,-1,_verb,0);
+    graph s(sname,-1,_verb);
     if(s.next()) { fprintf(stderr,"ERROR reading %s\n",sname); exit(1); };
     _nqx=round(s.L(0)/s.rmax()); _nqy=round(s.L(1)/s.rmax());
 
@@ -446,9 +423,6 @@ struct graph {
       // obtain regularized grid point for this atom
       int j = grid_indices[i];
       // store data
-      //in[2*j]   = _v[i].normal[0];
-      //in[2*j+1] = _v[i].normal[1];
-      //
       in[2*j] = _pos[2*i];
       in[2*j+1] = _pos[2*i+1];
     }
@@ -477,14 +451,11 @@ struct graph {
     for(i=0; i<_size; i++) {
       int numneigh = _v[i].neigh.size();
       double numnorm = 0;
-      //n = _v[i].normal;
       n.resize(3);
       for(d=0; d<3; d++) n[d]=0;
       if(numneigh<2) continue;
       int ni = _v[i].id;
       if(_verb>1) printf("(NORMAL) %-3d : ",ni);
-      //for(j=0; j<_v[i].neigh.size(); j++) {
-      //  int nj = _v[i].neigh[j]->id;
       for(auto vj=_v[i].neigh.begin(); vj!=_v[i].neigh.end(); vj++) {
         int nj = (*vj)->id;
         for(d=0,norm1=0; d<3; d++) {
@@ -496,8 +467,6 @@ struct graph {
         for(d=0; d<3; d++) r1[d]/=norm1;
         for(auto vk=_v[i].neigh.begin(); vk!=_v[i].neigh.end(); vk++) {
           int nk = (*vk)->id;
-        //for(k=0; k<j; k++) {
-        //  int nk = _v[i].neigh[k]->id;
           for(d=0,norm2=0; d<3; d++) {
             r2[d] = _pos[3*ni+d]-_pos[3*nk+d];
             r2[d] -= round(r1[d]/_cell[d])*_cell[d]; // periodic boundary conditions
@@ -533,11 +502,10 @@ struct graph {
     // awk 'NR>2{print NR-3,$0}' sample.xyz | sort -k 3,3n -k 4,4n | awk '{print $1}' > sample.indices
     vector<float> _pos, _cell;
     vector<vertex> _v;                // internal storage of vertices
-    //vector<string> _types;            // atom types
     vector<int> _typesnum;            // numeric version of atom types
     unordered_set<string> _typeset;
     unsigned _size;
-    int _frame, _verb, _readmethod;
+    int _frame, _verb;
     ifstream _f;
     float _r2max;                      // maximum r^2[A][B] value for loaded types
     unordered_map<string,unordered_map<string,float> > r2map;  // precomputed r^2[A][B] cutoffs
@@ -559,7 +527,6 @@ int main(int argc, char** argv) {
   options are:\n\
   -a <n>  analysis tool : 1=bond lengths, 2=pyramidalization, 3=coordination, 4=normal correlations\n\
   -f      write analysis data to file\n\
-  -F      read file using fscanf method instead of pointer logic (fscanf may be more stable in some cases, pointer method is ~40\% faster)\n\
   -n <n>  stop after n frames\n\
   -p <n>  print selection (binary code, e.g. 11=1+2+8: 1=neighbors, 2=rings, 4=clusters, 8=chains)\n\
   -R <x>  set manual cutoff distance (default is hardcoded per specied based on vdW radii)\n\
@@ -578,14 +545,12 @@ int main(int argc, char** argv) {
   int  lfile=0;     // print analysis to file (1=yes, 2=only)
   bool lquiet=false;// be quiet
   int  verbs=0;     // verbosity
-  int  readmethod=1;// fscanf or pointer logic
   double rcut=-1;   // manual cutoff
 
-  while ((c = getopt(argc, argv, "a:fFn:p:R:vqxh")) != -1) {
+  while ((c = getopt(argc, argv, "a:fn:p:R:vqxh")) != -1) {
     switch(c) {
       case 'a': analysis=atoi(optarg); break;
       case 'f': lfile++; break;
-      case 'F': readmethod=1-readmethod; break;
       case 'n': nfrms=atoi(optarg); break;
       case 'p': print=abs(atoi(optarg)); break;
       case 'R': rcut=atof(optarg); break;
@@ -597,15 +562,13 @@ int main(int argc, char** argv) {
     }
   }
 
-  if(verbs)
-    fprintf(stderr,"# MINOS options: analyze=%d, print=%d, verbose=%d, stat=%d\n",analysis,print,verbs,lstat);
+  if(verbs) fprintf(stderr,"# MINOS options: analyze=%d, print=%d, verbose=%d, stat=%d\n",analysis,print,verbs,lstat);
 
   if(argc-optind<1) {fprintf(stderr,"ERROR: no input file specified.\n"); return 1;};
-  graph g(argv[optind],rcut,verbs,readmethod);      // initialize graph
+  graph g(argv[optind],rcut,verbs);      // initialize graph
   if(analysis==4) g.read_grid_indices();
-
-  while(!g.next()) {   // loop over frames (while not returning an error)
-    if(lstat) g.statistics(lfile);   // print statistics
+  while(!g.next()) {                     // loop over frames
+    if(lstat) g.statistics(lfile);       // print statistics
     else if(!lquiet) cout << "frame " << g.frame() << endl;
     if(nfrms && g.frame()>=nfrms) break;
     switch(analysis) {
@@ -617,7 +580,6 @@ int main(int argc, char** argv) {
       default: fprintf(stderr,"ERROR: unimplented analysis method chosen\n"); return 1; break;
     }
   }
-
   if(analysis==4) g.finish_normal_correlation();
 
   end = clock();

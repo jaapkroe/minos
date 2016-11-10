@@ -36,7 +36,7 @@ int main(int argc, char** argv) {
     double d=l/ni;
     fprintf(f,"%d %d\n%f %f %f\n",n,ni,l,l,l);
     int counter=0;
-    for(int i=0;i<ni;i++) {
+    for(int i=0;i<ni;i++) { // simple cubic lattice
       for(int j=0;j<ni;j++) {
         for(int k=0;k<ni;k++,counter++) {
           if(counter>=n) continue;

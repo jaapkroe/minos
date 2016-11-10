@@ -23,3 +23,6 @@
 4194304     CPU-time: 8.7036 sec, Total-time: 8.7043 sec
 8388608     CPU-time: 17.0665 sec, Total-time: 17.0678 sec
 16777216    CPU-time: 35.6365 sec, Total-time: 35.6397 sec
+33554432    CPU-time: 73.6339 sec, Total-time: 73.6059 sec
+#67108864    CPU-time: 148.5372 sec, Total-time: 148.5229 sec
+67108864    CPU-time: 146.3654 sec, Total-time: 149.7264 sec
