@@ -1,0 +1,72 @@
+#!/usr/bin/gnuplot
+
+set term pdfcairo enh size 3,2 lw 2
+set output "stats.pdf"
+
+set fit quiet
+
+system("./stats-min.sh > stats.dat")
+#system("./stats.sh > stats.dat")
+t0=0.0+system("sort -nk2 stats.dat | awk 'NR==1{print $2}' ")
+
+f1=1    
+f(x) = t0 + f1*x
+g(x) = t0 + g1*x*log(x) 
+h(x) = t0 + h1*x**2
+
+fit f(x) 'stats.dat' u 1:2 via f1
+fit g(x) 'stats.dat' u 1:2 via g1
+fit h(x) 'stats.dat' u 1:2 via h1
+
+f1=2.78e-06
+#g1=2.1e-7
+
+set multiplot
+
+set logscale xy
+set xlab "N"
+set ylab "t/N ({/Symbol m}sec / particle)"
+set xtics 1,10,1e9 format "10^{%L}" nomirror
+set ytics 1e-8,10,1e9 format "10^{%L}" nomirror
+set mxtics 5
+set mytics 5
+set key top right
+set xran [1:]
+
+pl   f(x)/x*1e6 t "O(N)" ls 2,\
+     g(x)/x*1e6 t "O(N log N)" ls 4 dt 1,\
+   'stats.dat' u 1:($2/$1*1e6) w p ls 1 ps .3 not
+
+set size .55,.5
+set origin .4, .3
+unset ylab
+unset xlab
+unset key
+set xran [2e3:]
+set ytics ("2.2" 2.2, \
+           "2.6" 2.6, \
+           "3.0" 3.0, \
+           "3.4" 3.4, \
+           )
+set mytics 2
+#set yran [1e-3:]
+set yran [*:3.7]
+rep
+
+unset multiplot
+
+set origin 0,0
+set size 1,1
+set xlab "N"
+set ylab "t (sec)"
+set xtics 1,10,1e9 format "10^{%L}" nomirror
+set ytics 1e-8,1e1,1e8 format "10^{%L}" nomirror
+set mytics 5
+set key top left
+set xran [1:]
+set yran [1e-3:*]
+
+pl   f(x) t 'O(N)' ls 2,\
+     g(x) t "O(N log N)" ls 4 dt 1,\
+   'stats.dat' u 1:2 w p ls 1 ps .3 not
+
