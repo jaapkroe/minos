@@ -14,7 +14,6 @@
 #include <ctime>                  // clock
 #include <cmath>                  // round, sqrt
 #include <algorithm>
-#include <fftw3.h>
 
 #define BONDS 3 // estimate number of bonds for vector reservation
 #define MAXLINEW numeric_limits<std::streamsize>::max()
@@ -358,44 +357,6 @@ struct graph {
     }
   }
 
-  void stat_normal_correlation() {
-    /* compute the normal vectors for each atom */
-    if(_verb) fprintf(stderr,"computing normal vectors.\n");
-    compute_normals();
-    /* compute forward and backward fourier transforms */
-    compute_2d_fft();
-  }
-
-  void finish_normal_correlation() {
-    FILE* f=fopen("correlations.dat","w");
-    for(int i=0; i<_nqx; i++) {
-      for(int j=0; j<_nqy; j++) {
-        int n = i + j*_nqy;
-        double correlator = FFT[n][0]*FFT[n][0] + FFT[n][1]*FFT[n][1];
-        fprintf (f,"%6d %6d %g\n",i,j,correlator);
-      }
-      printf("\n");
-    }
-    fftw_free(FFT);
-  }
-
-  void read_grid_indices() {
-    char sname[20] = "sample.xyz";
-    graph s(sname,-1,_verb);
-    if(s.next()) { fprintf(stderr,"ERROR reading %s\n",sname); exit(1); };
-    _nqx=round(s.L(0)/s.rmax()); _nqy=round(s.L(1)/s.rmax());
-
-    fprintf(stderr,"read_grid_indices\n");
-    char fname[20] = "sample.indices";
-    ifstream f;
-    string line;
-    if(_verb) fprintf(stderr,"nqx, nqy = %d, %d\n",_nqx,_nqy);
-    FFT = fftw_alloc_complex(_nqx*_nqy);
-    f.open(fname);
-    if(!f) { printf("ERROR opening file %s\n",fname); exit(1); };
-    while(getline(f,line)) grid_indices.push_back( atoi(line.c_str()) );
-  }
-
   // public access functions
   inline double L(unsigned i) { return (i<_size) ? _cell[i] : 0 ; };
   inline double x(unsigned i, unsigned j) { return (i<_size&&j<3) ? _pos[3*i+j] : 0; };
@@ -403,103 +364,9 @@ struct graph {
   inline double rmax() { return sqrt(_r2max); };
   inline double N() { return _size; };
 
-  void compute_2d_fft() {
-    /*
-     * Compute the 2D fourier transforms of the normals
-     * and update the correlation function
-     * correlator = <|n(q)|^2> = n(q) * c.c.
-     */
-    // setup grid sizes
-    size_t Nin = 2*_size;
-    size_t Nout = _nqx*_nqy;
-    unsigned i;
-    double *in = fftw_alloc_real(Nin);
-    fftw_complex *out = fftw_alloc_complex(Nout);
-    fftw_plan p = fftw_plan_dft_r2c_2d(_nqx, _nqy, in, out, FFTW_ESTIMATE);
-
-    // fill input data
-    for(i=0; i<Nin; i++) in[i]=0;
-    for(i=0; i<_size; i++) {
-      // obtain regularized grid point for this atom
-      int j = grid_indices[i];
-      // store data
-      in[2*j] = _pos[2*i];
-      in[2*j+1] = _pos[2*i+1];
-    }
-
-    // run fftw and store results
-    fftw_execute(p);
-    for(i=0; i<Nout; i++) {
-      FFT[i][0] += out[i][0];
-      FFT[i][1] += out[i][1];
-    }
-
-    fftw_destroy_plan(p); fftw_free(in); fftw_free(out);
-  }
-
-  void compute_normals() {
-    /*
-     * Normals for atom i are computed as the average
-     * outer-product rij and rik for neigbors j and k of i.
-     * An atom needs at least two neighbors to be able to define a normal
-     * To ensure the direction is not opposite, every new vector
-     * is projected onto the previously computed normal
-     */
-    unsigned i,d;
-    double r1[3], r2[3], norm1,norm2;
-    vector<double> n;
-    for(i=0; i<_size; i++) {
-      int numneigh = _v[i].neigh.size();
-      double numnorm = 0;
-      n.resize(3);
-      for(d=0; d<3; d++) n[d]=0;
-      if(numneigh<2) continue;
-      int ni = _v[i].id;
-      if(_verb>1) printf("(NORMAL) %-3d : ",ni);
-      for(auto vj=_v[i].neigh.begin(); vj!=_v[i].neigh.end(); vj++) {
-        int nj = (*vj)->id;
-        for(d=0,norm1=0; d<3; d++) {
-          r1[d] = _pos[3*ni+d]-_pos[3*nj+d];
-          r1[d] -= round(r1[d]/_cell[d])*_cell[d]; // periodic boundary conditions
-          norm1 += r1[d]*r1[d];
-        }
-        norm1=sqrt(norm1);
-        for(d=0; d<3; d++) r1[d]/=norm1;
-        for(auto vk=_v[i].neigh.begin(); vk!=_v[i].neigh.end(); vk++) {
-          int nk = (*vk)->id;
-          for(d=0,norm2=0; d<3; d++) {
-            r2[d] = _pos[3*ni+d]-_pos[3*nk+d];
-            r2[d] -= round(r1[d]/_cell[d])*_cell[d]; // periodic boundary conditions
-            norm2 += r2[d]*r2[d];
-          }
-          norm2 = sqrt(norm2);
-          for(d=0; d<3; d++) r2[d]/=norm2;
-          // compute outer product
-          double out_x = r1[1]*r2[2] - r1[2]*r2[1];
-          double out_y = r1[2]*r2[0] - r1[0]*r2[2];
-          double out_z = r1[0]*r2[1] - r1[1]*r2[0];
-          double tmp = out_x*n[0] + out_y*n[1] + out_z*n[2];
-          double norm3inv = 1.0/sqrt(out_x*out_x+out_y*out_y+out_z*out_z);
-          if(tmp<0) norm3inv = -norm3inv;
-          n[0] += (r1[1]*r2[2] - r1[2]*r2[1])*norm3inv;
-          n[1] += (r1[2]*r2[0] - r1[0]*r2[2])*norm3inv;
-          n[2] += (r1[0]*r2[1] - r1[1]*r2[0])*norm3inv;
-          numnorm+=1;
-        }
-      }
-      if(numnorm>0) for(d=0; d<3; d++) n[d] /= numnorm;
-      if(_verb>1) printf("%7.3f %7.3f %7.3f\n",n[0],n[1],n[2]);
-    }
-  }
-
   inline int frame() { return _frame; }
 
   private:
-    int _nqx, _nqy;
-    fftw_complex *FFT;
-    vector<int> grid_indices; // real space mapping of atoms regular grid
-    // for the grid mapping use a reference structure (sample.xyz), e.g.
-    // awk 'NR>2{print NR-3,$0}' sample.xyz | sort -k 3,3n -k 4,4n | awk '{print $1}' > sample.indices
     vector<float> _pos, _cell;
     vector<vertex> _v;                // internal storage of vertices
     vector<int> _typesnum;            // numeric version of atom types
@@ -525,7 +392,7 @@ int main(int argc, char** argv) {
   string usage="usage: minos <options> file.xyz\n\
   \n\
   options are:\n\
-  -a <n>  analysis tool : 1=bond lengths, 2=pyramidalization, 3=coordination, 4=normal correlations\n\
+  -a <n>  analysis tool : 1=bond lengths, 2=pyramidalization, 3=coordination\n\
   -f      write analysis data to file\n\
   -n <n>  stop after n frames\n\
   -p <n>  print selection (binary code, e.g. 11=1+2+8: 1=neighbors, 2=rings, 4=clusters, 8=chains)\n\
@@ -566,7 +433,6 @@ int main(int argc, char** argv) {
 
   if(argc-optind<1) {fprintf(stderr,"ERROR: no input file specified.\n"); return 1;};
   graph g(argv[optind],rcut,verbs);      // initialize graph
-  if(analysis==4) g.read_grid_indices();
   while(!g.next()) {                     // loop over frames
     if(lstat) g.statistics(lfile);       // print statistics
     else if(!lquiet) cout << "frame " << g.frame() << endl;
@@ -576,11 +442,9 @@ int main(int argc, char** argv) {
       case 1: g.stat_bondlengths(lfile); break;
       case 2: g.stat_pyramidalization(); break;
       case 3: g.stat_coordination(lfile,g.frame()); break;
-      case 4: g.stat_normal_correlation(); break;
       default: fprintf(stderr,"ERROR: unimplented analysis method chosen\n"); return 1; break;
     }
   }
-  if(analysis==4) g.finish_normal_correlation();
 
   end = clock();
   clock_gettime(CLOCK_MONOTONIC, &spec);
