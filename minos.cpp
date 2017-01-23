@@ -363,7 +363,6 @@ struct graph {
   inline double xp(unsigned i, unsigned j) { double x=_pos[3*i+j]; return (i<_size&&j<3) ? x-round(x/_cell[j])*_cell[j] : 0; };
   inline double rmax() { return sqrt(_r2max); };
   inline double N() { return _size; };
-
   inline int frame() { return _frame; }
 
   private:
@@ -395,31 +394,24 @@ int main(int argc, char** argv) {
   -a <n>  analysis tool : 1=bond lengths, 2=pyramidalization, 3=coordination\n\
   -f      write analysis data to file\n\
   -n <n>  stop after n frames\n\
-  -p <n>  print selection (binary code, e.g. 11=1+2+8: 1=neighbors, 2=rings, 4=clusters, 8=chains)\n\
   -R <x>  set manual cutoff distance (default is hardcoded per specied based on vdW radii)\n\
   -v      increase verbosity level\n\
   -x      print brief neighboring statistics to stdout\n\
-  -h      show this help message\n\
-  \n\
-  Franzblau   : all rings without shortcuts\n\
-  King        : all shortest paths between two neighbors\n\
-  Guttman     : all shortest paths between root and neighbor\n";
+  -h      show this help message\n";
 
   int  analysis=0;  // analysis tool
   int  nfrms=0;     // max frame
-  int  print=0;     // print selection
   bool lstat=false; // print statistics
   int  lfile=0;     // print analysis to file (1=yes, 2=only)
   bool lquiet=false;// be quiet
   int  verbs=0;     // verbosity
   double rcut=-1;   // manual cutoff
 
-  while ((c = getopt(argc, argv, "a:fn:p:R:vqxh")) != -1) {
+  while ((c = getopt(argc, argv, "a:fn:R:vqxh")) != -1) {
     switch(c) {
       case 'a': analysis=atoi(optarg); break;
       case 'f': lfile++; break;
       case 'n': nfrms=atoi(optarg); break;
-      case 'p': print=abs(atoi(optarg)); break;
       case 'R': rcut=atof(optarg); break;
       case 'v': verbs++; break;
       case 'q': lquiet=!lquiet; break;
@@ -429,7 +421,7 @@ int main(int argc, char** argv) {
     }
   }
 
-  if(verbs) fprintf(stderr,"# MINOS options: analyze=%d, print=%d, verbose=%d, stat=%d\n",analysis,print,verbs,lstat);
+  if(verbs) fprintf(stderr,"# MINOS options: analyze=%d, verbose=%d, stat=%d\n",analysis,verbs,lstat);
 
   if(argc-optind<1) {fprintf(stderr,"ERROR: no input file specified.\n"); return 1;};
   graph g(argv[optind],rcut,verbs);      // initialize graph
