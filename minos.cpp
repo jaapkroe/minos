@@ -32,8 +32,7 @@ struct vertex {
 };
 
 struct graph {
-  /* the graph class is the main class of this program
-  it defines all relevant functions like ring-search */
+  /* the graph class defines the ensemble of vertices and functions that can be applied to them */
   graph(const char* fname, double rcut, int verb) : _verb(verb) { // constructor
     _f.open(fname);
     if(!_f) { printf("ERROR opening file %s\n",fname); exit(1); };
@@ -57,9 +56,8 @@ struct graph {
         else r2map[elements[i]][elements[j]] = radii[i] * radii[j];
       }
     }
-    // @modification possible: here one could modify a bond length, e.g.
-    //r2map["C"]["C"]=1.67*1.67;        // rcut = 1.67
-    //r2map["N"]["B"]=r2map["B"]["N"];  // symmetrize
+    // bond length modification possible here, e.g.  
+    // r2map["C"]["C"]=1.67*1.67;       // rcut = 1.67
   }
 
   int next() {               // read next frame
@@ -76,9 +74,9 @@ struct graph {
     string line;
     if(!(_f >> _size)) return 1;                    // read num of atoms (error=EOF!)
     _f.ignore(MAXLINEW, '\n');                      // go to end-of-line
-    _pos.clear();      _pos.reserve(3*_size); // memory will be filled by push_back
+    _pos.clear();      _pos.reserve(3*_size);       // memory will be filled by push_back
     _typesnum.clear(); _typesnum.reserve(_size);
-    _v.clear();        _v.resize(_size); // allocate directly
+    _v.clear();        _v.resize(_size);            // allocate directly
     getline(_f,line);                               // second header cell (treat with care)
     stringstream ss(line);
     for(unsigned i=0; i<3; i++) {
@@ -237,7 +235,7 @@ struct graph {
     i = hash & len;            // i is simply the last n binary digits
   }
 
-  void statistics(int lfile) {
+  void statistics() {
     double nnav = 0;
     unsigned i, len;
     vector<int> hist(3);
@@ -250,43 +248,30 @@ struct graph {
     printf("%4d %.4f : ",_frame,nnav/double(_size));
     for(i=0; i<hist.size(); i++) printf("%6d ",hist[i]);
     printf("\n");
+  }
 
-    if(lfile) {
-      ofstream f("neighbors.dat",ios_base::out);
-      f << "NEIGH" << endl;
-      for(unsigned i=0; i<_size; i++) {
-        f << i << " : " ;
-        for(auto vj=_v[i].neigh.begin(); vj!=_v[i].neigh.end(); vj++) {
-          f << (*vj)->id << " ";
-        }
-        f << endl;
-      }
-      f.close();
+  void stat_neighbours() {
+    for(unsigned i=0; i<_size; i++) {
+      printf("%d :",i);
+      for(auto vj=_v[i].neigh.begin(); vj!=_v[i].neigh.end(); vj++) 
+        printf(" %d",(*vj)->id);
+      printf("\n");
     }
   }
 
-  void stat_coordination(int lfile, int nframe) {
-    FILE *file=NULL;
-    if(lfile) {
-      if(nframe==1) file = fopen("coordination.dat","w");
-      else file = fopen("coordination.dat","a");
-    }
+  void stat_coordination() {
     for(unsigned i=0; i<_size; i++) {
       unsigned n = _v[i].id;
       unsigned nn = _v[i].neigh.size();
-      if(!lfile) printf("%-5d %d\n",n,nn);
-      else fprintf(file,"%d\n",nn);
+      printf("%-5d %d\n",n,nn);
     }
-    if(lfile) fclose(file);
   }
 
-  void stat_bondlengths(int lfile) {
-    FILE *file=NULL;
-    if(lfile) file = fopen("bonds.dat","w");
+  void stat_bondlengths() {
     unsigned i,d,n,m;
     for(i=0; i<_size; i++) {
       n = _v[i].id;
-      if(lfile<2) printf("%-3d : (%ld)",n,_v[i].neigh.size());
+      printf("%-3d :",n);
       for(auto vj=_v[i].neigh.begin(); vj!= _v[i].neigh.end(); vj++) {
         m = (*vj)->id;
         double r2 = 0;
@@ -295,14 +280,10 @@ struct graph {
           dx -= round(dx/_cell[d])*_cell[d]; // periodic boundary conditions
           r2 += dx*dx;
         }
-        if(lfile<2) printf (" %3d",m);
-        if(lfile && n<m) { // print average coordinates and bond lengths
-          fprintf(file,"%7.3f %7.3f %7.3f    %7.3f\n", 0.5*(_pos[3*n]+_pos[3*m]), 0.5*(_pos[3*n+1]+_pos[3*m+1]), 0.5*(_pos[3*n+2]+_pos[3*m+2]) , sqrt(r2));
-        }
+        printf (" <%d> %.3f",m,sqrt(r2));
       }
-      if(lfile<2) printf("\n");
+      printf("\n");
     }
-    if(lfile) fclose(file);
   }
 
   void stat_pyramidalization() {
@@ -391,10 +372,9 @@ int main(int argc, char** argv) {
   string usage="usage: minos <options> file.xyz\n\
   \n\
   options are:\n\
-  -a <n>  analysis tool : 1=bond lengths, 2=pyramidalization, 3=coordination\n\
-  -f      write analysis data to file\n\
+  -a <n>  analysis tool : 1=bond lengths, 2=pyramidalization, 3=coordination, 4=neighbours\n\
   -n <n>  stop after n frames\n\
-  -R <x>  set manual cutoff distance (default is hardcoded per specied based on vdW radii)\n\
+  -r <x>  set manual cutoff distance (default is hardcoded per specied based on vdW radii)\n\
   -v      increase verbosity level\n\
   -x      print brief neighboring statistics to stdout\n\
   -h      show this help message\n";
@@ -402,17 +382,15 @@ int main(int argc, char** argv) {
   int  analysis=0;  // analysis tool
   int  nfrms=0;     // max frame
   bool lstat=false; // print statistics
-  int  lfile=0;     // print analysis to file (1=yes, 2=only)
   bool lquiet=false;// be quiet
   int  verbs=0;     // verbosity
   double rcut=-1;   // manual cutoff
 
-  while ((c = getopt(argc, argv, "a:fn:R:vqxh")) != -1) {
+  while ((c = getopt(argc, argv, "a:n:r:vqxh")) != -1) {
     switch(c) {
       case 'a': analysis=atoi(optarg); break;
-      case 'f': lfile++; break;
       case 'n': nfrms=atoi(optarg); break;
-      case 'R': rcut=atof(optarg); break;
+      case 'r': rcut=atof(optarg); break;
       case 'v': verbs++; break;
       case 'q': lquiet=!lquiet; break;
       case 'x': lstat=!lstat; break;
@@ -426,14 +404,15 @@ int main(int argc, char** argv) {
   if(argc-optind<1) {fprintf(stderr,"ERROR: no input file specified.\n"); return 1;};
   graph g(argv[optind],rcut,verbs);      // initialize graph
   while(!g.next()) {                     // loop over frames
-    if(lstat) g.statistics(lfile);       // print statistics
+    if(lstat) g.statistics();    // print statistics
     else if(!lquiet) cout << "frame " << g.frame() << endl;
     if(nfrms && g.frame()>=nfrms) break;
     switch(analysis) {
       case 0: break;
-      case 1: g.stat_bondlengths(lfile); break;
+      case 1: g.stat_bondlengths(); break;
       case 2: g.stat_pyramidalization(); break;
-      case 3: g.stat_coordination(lfile,g.frame()); break;
+      case 3: g.stat_coordination(); break;
+      case 4: g.stat_neighbours(); break;
       default: fprintf(stderr,"ERROR: unimplented analysis method chosen\n"); return 1; break;
     }
   }
