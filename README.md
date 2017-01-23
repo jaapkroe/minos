@@ -8,12 +8,18 @@ MINOS
     cd minos
     make 
 
+## Using
+
+    ./minos -h
+    ./minos file.xyz
+
 ## Testing
-In the test folder several cases
-- disk read test, evaluating read method 
+The test folder contains
+- a scaling test as function of system size
+- disk read test, evaluating which read method 
   is fastest for reading text files from disk
-- fftw tests for any 1D or 2D function
-- boost graph library use (!broken atm!)
+- fftw tests for 1D and 2D functions
+- an example how to use bitpacking
 
 ## Coding
 The code has following functions
@@ -21,6 +27,6 @@ The code has following functions
 - compute tetrahedral angles
 - print (number of) neighbors per atom 
 
-The following functions are partially implemented (to be done)
+The following functions are partially implemented (see other git branches)
 - graph search of rings
 - k-space normal and height fluctions correlation functions
