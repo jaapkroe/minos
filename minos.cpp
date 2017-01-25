@@ -91,7 +91,7 @@ struct graph {
         }
       }
     }
-    if(_verb) fprintf(stderr,"CELL = { %20.16g, %20.16g, %20.16g }\n",_cell[0],_cell[1],_cell[2]);
+    if(_verb>1) fprintf(stderr,"CELL = { %20.16g, %20.16g, %20.16g }\n",_cell[0],_cell[1],_cell[2]);
     unsigned ntypes=0, i;
     unordered_map<string, int> map_types_nums;      // map types to a number
     char t[8];
@@ -101,7 +101,7 @@ struct graph {
       sscanf(line.c_str(),"%s%lf%lf%lf",t,&x,&y,&z);
       _pos.push_back(x); _pos.push_back(y); _pos.push_back(z);
 
-      if(_verb>0) fprintf(stderr,"x[%5d] = [ % 20.16g % 20.16g % 20.16g ]\n",i,_pos[3*i],_pos[3*i+1],_pos[3*i+2]);
+      if(_verb>2) fprintf(stderr,"x[%5d] = [ % 20.16g % 20.16g % 20.16g ]\n",i,_pos[3*i],_pos[3*i+1],_pos[3*i+2]);
       /* determine unique types */
       auto res = _typeset.insert(t);        // returns a pair of <iter,bool>
       if(get<1>(res)) {                     // successful insert,
@@ -169,7 +169,7 @@ struct graph {
         if(n[j]==nbox[j] && nbox[j]>0) n[j]--; // merge the last box with the one before it to avoid a tiny last box
       }
       hash(n[0],n[1],n[2],nhash);              // integer hash of boxnumber
-      if(_verb>1) {
+      if(_verb>3) {
         unhash(m[0],m[1],m[2],nhash); // unhash to get indices
         fprintf(stderr,"hashing cell of atom %4d : (%7u,%7u,%7u) --> %20llu --> (%7u,%7u,%7u)\n",i,n[0],n[1],n[2],nhash,m[0],m[1],m[2]);
       }
@@ -271,7 +271,6 @@ struct graph {
     unsigned i,d,n,m;
     for(i=0; i<_size; i++) {
       n = _v[i].id;
-      printf("%-3d :",n);
       for(auto vj=_v[i].neigh.begin(); vj!= _v[i].neigh.end(); vj++) {
         m = (*vj)->id;
         double r2 = 0;
@@ -280,9 +279,10 @@ struct graph {
           dx -= round(dx/_cell[d])*_cell[d]; // periodic boundary conditions
           r2 += dx*dx;
         }
-        printf (" <%d> %.3f",m,sqrt(r2));
+        if(_verb>1) printf ("%.3f %d %d %d %d\n",sqrt(r2),n,m,_typesnum[n],_typesnum[m]);
+        else if(_verb==1) printf ("%.3f %d %d\n",sqrt(r2),n,m);
+        else printf ("%.3f\n",sqrt(r2));
       }
-      printf("\n");
     }
   }
 
@@ -373,23 +373,20 @@ int main(int argc, char** argv) {
   \n\
   options are:\n\
   -a <n>  analysis tool : 1=bond lengths, 2=pyramidalization, 3=coordination, 4=neighbours\n\
-  -n <n>  stop after n frames\n\
   -r <x>  set manual cutoff distance (default is hardcoded per specied based on vdW radii)\n\
   -v      increase verbosity level\n\
   -x      print brief neighboring statistics to stdout\n\
   -h      show this help message\n";
 
   int  analysis=0;  // analysis tool
-  int  nfrms=0;     // max frame
   bool lstat=false; // print statistics
   bool lquiet=false;// be quiet
   int  verbs=0;     // verbosity
   double rcut=-1;   // manual cutoff
 
-  while ((c = getopt(argc, argv, "a:n:r:vqxh")) != -1) {
+  while ((c = getopt(argc, argv, "a:r:vqxh")) != -1) {
     switch(c) {
       case 'a': analysis=atoi(optarg); break;
-      case 'n': nfrms=atoi(optarg); break;
       case 'r': rcut=atof(optarg); break;
       case 'v': verbs++; break;
       case 'q': lquiet=!lquiet; break;
@@ -406,7 +403,6 @@ int main(int argc, char** argv) {
   while(!g.next()) {                     // loop over frames
     if(lstat) g.statistics();    // print statistics
     else if(!lquiet) cout << "frame " << g.frame() << endl;
-    if(nfrms && g.frame()>=nfrms) break;
     switch(analysis) {
       case 0: break;
       case 1: g.stat_bondlengths(); break;
@@ -420,6 +416,6 @@ int main(int argc, char** argv) {
   end = clock();
   clock_gettime(CLOCK_MONOTONIC, &spec);
   s_end = spec.tv_sec; ns_end = spec.tv_nsec;
-  fprintf(stderr,"CPU-time: %.4f sec, Total-time: %.4f sec\n",
+  if(!lquiet) fprintf(stderr,"CPU-time: %.4f sec, Total-time: %.4f sec\n",
         double(end-start)/CLOCKS_PER_SEC, (double) (s_end-s_start) + (double)(ns_end-ns_start)/1e9);
 }
