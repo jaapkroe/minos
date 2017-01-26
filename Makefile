@@ -5,7 +5,7 @@
 CPPFLAGS=-O3 -g -std=c++11 -Wall #-fdiagnostics-color=auto 
 #CPPFLAGS+=-DHASLEMON
 #CPPFLAGS+=-fopenmp 
-LDLIBS=-lm -lfftw3
+LDLIBS=-lm -lrt
 
 minos: minos.cpp
 
