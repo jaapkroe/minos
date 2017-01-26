@@ -2,7 +2,7 @@ MINOS
 ======================
 
 ## Obtaining the Code
-    git clone https://gitlab.science.ru.nl/jaapkroes/minos.git
+    git clone https://github.com/jaapkroe/minos.git
 
 ## Compiling
     cd minos
