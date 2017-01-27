@@ -402,7 +402,7 @@ int main(int argc, char** argv) {
   graph g(argv[optind],rcut,verbs);      // initialize graph
   while(!g.next()) {                     // loop over frames
     if(lstat) g.statistics();    // print statistics
-    else if(!lquiet) cout << "frame " << g.frame() << endl;
+    else if(!lquiet) cout << "#frame " << g.frame() << endl;
     switch(analysis) {
       case 0: break;
       case 1: g.stat_bondlengths(); break;
