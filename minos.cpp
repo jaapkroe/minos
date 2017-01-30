@@ -1,11 +1,13 @@
 #include <unistd.h>
 #include <vector>
 #include <stdio.h>
+#include <stdlib.h>
 #include <getopt.h>
 #include <iostream>
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <list>
 #include <queue>
 #include <unordered_set>
 #include <unordered_map>
@@ -14,21 +16,23 @@
 #include <ctime>                  // clock
 #include <cmath>                  // round, sqrt
 #include <algorithm>
+#include <random>
 
-#define BONDS 3 // estimate number of bonds for vector reservation
 #define MAXLINEW numeric_limits<std::streamsize>::max()
 #define abs(x) (x<0?-x:x)
 #define BIG 2e6 // big number for cell size ~ 2^21
 using namespace std;
 
 vector<string> elements = {"X","H","He","Li","Be","B","C","N","O","F","Ne","Na","Mg","Al","Si","P","S","Cl","Ar","K","Ca","Sc","Ti","V","Cr","Mn","Fe","Co","Ni","Cu","Zn","Ga","Ge","As","Se","Br","Kr","Rb","Sr","Y","Zr","Nb","Mo","Tc","Ru","Rh","Pd","Ag","Cd","In","Sn","Sb","Te","I","Xe","Cs","Ba","La","Ce","Pr","Nd","Pm","Sm","Eu","Gd","Tb","Dy","Ho","Er","Tm","Yb","Lu","Hf","Ta","W","Re","Os","Ir","Pt","Au","Hg","Tl","Pb","Bi","Po","At","Rn","Fr","Ra","Ac","Th","Pa","U","Np","Pu","Am","Cm","Bk","Cf","Es","Fm","Md","No","Lr","Rf","Db","Sg","Bh","Hs","Mt","Ds","Rg"};
-vector<float> radii = {1.5, 1.2, 1.4, 3.40, 2.0, 1.7, 1.7, 1.7, 1.52, 1.47, 1.54, 1.36, 1.18, 2.0, 2.1, 1.8, 1.8, 2.27, 1.88, 1.76, 1.37, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.63, 1.4, 1.39, 1.07, 2.0, 1.85, 1.9, 1.85, 2.02, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.63, 1.72, 1.58, 1.93, 2.17, 2.0, 2.06, 1.98, 2.16, 2.1, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.72, 1.66, 1.55, 1.96, 2.02, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.86, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0};
+vector<double> radii = {1.5, 1.2, 1.4, 3.40, 2.0, 1.7, 1.7, 1.7, 1.52, 1.47, 1.54, 1.36, 1.18, 2.0, 2.1, 1.8, 1.8, 2.27, 1.88, 1.76, 1.37, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.63, 1.4, 1.39, 1.07, 2.0, 1.85, 1.9, 1.85, 2.02, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.63, 1.72, 1.58, 1.93, 2.17, 2.0, 2.06, 1.98, 2.16, 2.1, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.72, 1.66, 1.55, 1.96, 2.02, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.86, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0};
 
 struct vertex {
   /* the vertex class holds nodes (atoms) with edges (bonds) */
-  vertex() { neigh.reserve(BONDS); } // constructor
-  vector<vertex*> neigh;
-  int id;
+  //vertex() { neigh.reserve(); } // constructor
+  list<vertex*> neigh;
+  string type;
+  vector<double> X;
+  int id, typenum;
 };
 
 struct graph {
@@ -74,9 +78,8 @@ struct graph {
     string line;
     if(!(_f >> _size)) return 1;                    // read num of atoms (error=EOF!)
     _f.ignore(MAXLINEW, '\n');                      // go to end-of-line
-    _pos.clear();      _pos.reserve(3*_size);       // memory will be filled by push_back
-    _typesnum.clear(); _typesnum.reserve(_size);
-    _v.clear();        _v.resize(_size);            // allocate directly
+    _typesnum.clear();
+    _v.clear();
     getline(_f,line);                               // second header cell (treat with care)
     stringstream ss(line);
     for(unsigned i=0; i<3; i++) {
@@ -98,23 +101,26 @@ struct graph {
     double x,y,z;
     for(i=0; i<_size; i++) {                        // read coordinates
       getline(_f,line);
+      vertex v;
       sscanf(line.c_str(),"%s%lf%lf%lf",t,&x,&y,&z);
-      _pos.push_back(x); _pos.push_back(y); _pos.push_back(z);
-
-      if(_verb>2) fprintf(stderr,"x[%5d] = [ % 20.16g % 20.16g % 20.16g ]\n",i,_pos[3*i],_pos[3*i+1],_pos[3*i+2]);
+      v.X.push_back(x);
+      v.X.push_back(y);
+      v.X.push_back(z);
+      v.type = t;
+      v.id = i;
       /* determine unique types */
       auto res = _typeset.insert(t);        // returns a pair of <iter,bool>
       if(get<1>(res)) {                     // successful insert,
-        _typesnum.push_back(ntypes);        // set numeric types
-        map_types_nums[t]=ntypes++;         // map: types <-> numeric types
-      } else {                              // no successful insert, key exists
-        _typesnum.push_back(map_types_nums[t]);
+        map_types_nums[t]=ntypes;           // map: types <-> numeric types
+        ntypes++;
       }
-      _v[i].id=i;
+      v.typenum = map_types_nums[t];
+      _v.push_back(v);
+      if(_verb>2) fprintf(stderr,"x[%5d] = [ % 20.16g % 20.16g % 20.16g ]\n",i,x,y,z);
     }
 
     r2mapnum.clear();
-    for(unsigned i=0;i<=ntypes;i++) r2mapnum.push_back(vector<float>(ntypes+1));
+    for(unsigned i=0;i<=ntypes;i++) r2mapnum.push_back(vector<double>(ntypes+1));
     for(auto it=_typeset.begin(); it!=_typeset.end(); ++it ) {
       int i = map_types_nums[*it];
       if(find(elements.begin(),elements.end(),*it)==elements.end()) {
@@ -122,7 +128,7 @@ struct graph {
       }
       for(auto jt=_typeset.begin(); jt!=_typeset.end(); ++jt ) {
         int j = map_types_nums[*jt];
-        float r2 = r2map[*it][*jt];
+        double r2 = r2map[*it][*jt];
         if(r2>_r2max)_r2max=r2;
         r2mapnum[i][j] = r2;
         if(_verb) fprintf(stderr, "cutoff radius r[%s,%s]=%.2f\n",(*it).c_str(),jt->c_str(),sqrt(r2));
@@ -135,7 +141,7 @@ struct graph {
     /* this function computes the atom neighbors and turns atom positions into graph
     connections, the algorithm uses verlet lists with maps for sparse connections */
     vector<int> n(3), m(3), m1(3), m2(3), nbox(3);                  // cell-indices n,m; limits m1,m2=[-1,0,+1],nbox
-    float f[3];                                                     // cell size fractions
+    double f[3];                                                     // cell size fractions
     typedef unordered_map<unsigned long long,vector<int> > hashmap; // hashmap
     unsigned long long nhash, mhash;                                // 64-bit hash keywords
     hashmap nodemap;                                                // (sparse storage) map between cell id and array of nodes
@@ -161,9 +167,9 @@ struct graph {
       if(_verb) fprintf(stderr,"In direction [%d], #boxes=%d\n",j,nbox[j]);
     }
     if(_verb>1) fprintf(stderr,"loop limits : x[%d,%d] ; y[%d,%d] ; z[%d,%d]\n",m1[0],m2[0],m1[1],m2[1],m1[2],m2[2]);
-    for(unsigned i=0;i<_size;i++) {            // determine cell for each atom
+    for(unsigned i=0;i<_v.size();i++) {            // determine cell for each atom
       for(unsigned j=0;j<3;j++) {
-        double x = fmod(_pos[3*i+j],_cell[j]); // periodic boundary conditions
+        double x = fmod(_v[i].X[j],_cell[j]); // periodic boundary conditions
         if(x<0) x+=_cell[j];
         n[j] = int(x*f[j]);
         if(n[j]==nbox[j] && nbox[j]>0) n[j]--; // merge the last box with the one before it to avoid a tiny last box
@@ -171,7 +177,7 @@ struct graph {
       hash(n[0],n[1],n[2],nhash);              // integer hash of boxnumber
       if(_verb>3) {
         unhash(m[0],m[1],m[2],nhash); // unhash to get indices
-        fprintf(stderr,"hashing cell of atom %4d : (%7u,%7u,%7u) --> %20llu --> (%7u,%7u,%7u)\n",i,n[0],n[1],n[2],nhash,m[0],m[1],m[2]);
+        fprintf(stderr,"hashing cell of atom %4d : (%7u,%7u,%7u) HASH-> %20llu UNHASH-> (%7u,%7u,%7u)\n",i,n[0],n[1],n[2],nhash,m[0],m[1],m[2]);
       }
       it1 = nodemap.find(nhash);                                // check if key exists
       if(it1==nodemap.end()) nodemap[nhash] = vector<int>(1,i); // add new element to map..
@@ -190,20 +196,20 @@ struct graph {
             m[1] = ((my)%nbox[1]+nbox[1])%nbox[1];                                // note, otherwise in C(++) -7%3=-1 !!
             m[2] = ((mz)%nbox[2]+nbox[2])%nbox[2];
             bool samecell=(n==m);
-            if(_verb>2) fprintf(stderr,"cells n<->m = (%u,%u,%u) <-> (%u,%u,%u) [%u]\n",n[0],n[1],n[2],m[0],m[1],m[2],samecell);
             hash(m[0],m[1],m[2],mhash);
             if(samecell) it2 = it1;
             else it2 = nodemap.find(mhash);
             if(it2 != nodemap.end()) {                                            // if box m exists..
+              if(_verb>3) fprintf(stderr,"coupling cells (%7u,%7u,%7u) <-> (%7u,%7u,%7u) [samecell=%u] (#atoms in cell %lu and %lu)\n",n[0],n[1],n[2],m[0],m[1],m[2],samecell,it1->second.size(),it2->second.size());
               for(jt1 = it1->second.begin(); jt1 != it1->second.end(); jt1++) {   // jt1-loop (particles in box n)
                 for(jt2 = it2->second.begin(); jt2 != it2->second.end(); jt2++) { // jt2-loop (particles in box m)
                   int n1=*jt1, n2=*jt2;
                   if((!samecell&&(n1!=n2)) || (samecell&&(n1<n2))) {              // different cell or n1<n2 (lower half)..
-                    float r2 = 0.;                                                // bond distance squared
-                    float r2cut = r2mapnum[_typesnum[n1]][_typesnum[n2]];         // r^2 cutoff depending on atom types
-                    for(unsigned j=0, j1=3*n1, j2 =3*n2; j<3; j++, j1++, j2++) {
-                      float dx = _pos[j1]-_pos[j2];
-                      dx -= round(dx/_cell[j])*_cell[j];                          // periodic boundary conditions
+                    double r2cut = r2mapnum[_v[n1].typenum][_v[n2].typenum];         // r^2 cutoff depending on atom types
+                    double r2 = 0.0;
+                    for(unsigned d=0; d<3; d++) {
+                      double dx = _v[n1].X[d] - _v[n2].X[d];
+                      dx -= round(dx/_cell[d])*_cell[d];                          // periodic boundary conditions
                       r2 += dx*dx;
                       if(r2>r2cut) break;
                     }
@@ -211,7 +217,7 @@ struct graph {
                       _v[n1].neigh.push_back(&_v[n2]);
                       _v[n2].neigh.push_back(&_v[n1]);
                     }
-                    //if(_verb>4) fprintf(stderr,"atoms %3d ... %3d : %.2f\n",n1,n2,sqrt(r2));
+                    if(_verb>4) fprintf(stderr,"atoms %3d ... %3d : r=%.2f, rcut=%.2f\n",n1,n2,sqrt(r2),sqrt(r2cut));
                   } // n1!=n2
                 } // jt2-loop
               } // jt1-loop
@@ -239,19 +245,19 @@ struct graph {
     double nnav = 0;
     unsigned i, len;
     vector<int> hist(3);
-    for(i=0; i<_size; i++) {
+    for(i=0; i<_v.size(); i++) {
       len = _v[i].neigh.size();
       nnav += len;
       if(len>hist.size()-1) hist.resize(len+1);
       hist[len]++;
     }
-    printf("%4d %.4f : ",_frame,nnav/double(_size));
+    printf("%4d %.4f : ",_frame,nnav/double(_v.size()));
     for(i=0; i<hist.size(); i++) printf("%6d ",hist[i]);
     printf("\n");
   }
 
   void stat_neighbours() {
-    for(unsigned i=0; i<_size; i++) {
+    for(unsigned i=0; i<_v.size(); i++) {
       printf("%d :",i);
       for(auto vj=_v[i].neigh.begin(); vj!=_v[i].neigh.end(); vj++) 
         printf(" %d",(*vj)->id);
@@ -260,7 +266,7 @@ struct graph {
   }
 
   void stat_coordination() {
-    for(unsigned i=0; i<_size; i++) {
+    for(unsigned i=0; i<_v.size(); i++) {
       unsigned n = _v[i].id;
       unsigned nn = _v[i].neigh.size();
       printf("%-5d %d\n",n,nn);
@@ -269,17 +275,17 @@ struct graph {
 
   void stat_bondlengths() {
     unsigned i,d,n,m;
-    for(i=0; i<_size; i++) {
+    for(i=0; i<_v.size(); i++) {
       n = _v[i].id;
       for(auto vj=_v[i].neigh.begin(); vj!= _v[i].neigh.end(); vj++) {
         m = (*vj)->id;
         double r2 = 0;
         for(d=0; d<3; d++) {
-          double dx = _pos[3*n+d]-_pos[3*m+d];
+          double dx = _v[n].X[d] - _v[m].X[d]; 
           dx -= round(dx/_cell[d])*_cell[d]; // periodic boundary conditions
           r2 += dx*dx;
         }
-        if(_verb>1) printf ("%.3f %d %d %d %d\n",sqrt(r2),n,m,_typesnum[n],_typesnum[m]);
+        if(_verb>1) printf ("%.3f %d %d %d %d\n",sqrt(r2),n,m,_v[n].typenum,_v[m].typenum);
         else if(_verb==1) printf ("%.3f %d %d\n",sqrt(r2),n,m);
         else printf ("%.3f\n",sqrt(r2));
       }
@@ -288,7 +294,7 @@ struct graph {
 
   void stat_pyramidalization() {
     unsigned i,d;
-    for(i=0; i<_size; i++) {
+    for(i=0; i<_v.size(); i++) {
       if(_v[i].neigh.size()!=3) continue;
       int n = _v[i].id;
       printf("%-3d : ",n);
@@ -298,7 +304,7 @@ struct graph {
       for(auto vj=_v[i].neigh.begin(); vj!= _v[i].neigh.end(); vj++, j++) {
         int m = (*vj)->id;
         for(d=0; d<3; d++) {
-          double dx = _pos[3*n+d]-_pos[3*m+d];
+          double dx = _v[n].X[d] - _v[m].X[d]; 
           dx -= round(dx/_cell[d])*_cell[d]; // periodic boundary conditions
           r[j][d]=dx;
         }
@@ -338,25 +344,54 @@ struct graph {
     }
   }
 
+  void generate_vacancies(int n) {
+    struct timespec ts; // fast seed
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    unsigned int seed = ts.tv_nsec; // current time in nanoseconds
+    mt19937 generator(seed); // stdlib Mersenne Twister, 
+    for(int i=0;i<n;i++) {
+      uniform_int_distribution<int> distribution(0,_v.size());
+      int r = distribution(generator);
+      bool selected = false;
+      while(!selected) {
+        selected = true;
+        for(auto n = _v[r].neigh.begin(); n!=_v[r].neigh.end(); n++) {
+          if((*n)->neigh.size()<3) { 
+            selected = false;
+            break;
+          }
+        }
+        r = distribution(generator);
+      }
+      for(auto n = _v[r].neigh.begin(); n!=_v[r].neigh.end(); n++) {
+        //*(n->neigh).remove(_v[r]);
+      }
+      _v.erase(_v.begin()+r);
+      _size--;
+    }
+  }
+
+  void write_xyz() {
+    printf("%ld\n%.5f %.5f %.5f\n",_v.size(),_cell[0],_cell[1],_cell[2]);
+    for(auto vi = _v.begin(); vi!=_v.end(); vi++) { 
+      printf("%-2s % 19.10f % 19.10f % 19.10f\n", vi->type.c_str(), vi->X[0], vi->X[1], vi->X[2]);
+    }
+  }
+
   // public access functions
-  inline double L(unsigned i) { return (i<_size) ? _cell[i] : 0 ; };
-  inline double x(unsigned i, unsigned j) { return (i<_size&&j<3) ? _pos[3*i+j] : 0; };
-  inline double xp(unsigned i, unsigned j) { double x=_pos[3*i+j]; return (i<_size&&j<3) ? x-round(x/_cell[j])*_cell[j] : 0; };
-  inline double rmax() { return sqrt(_r2max); };
-  inline double N() { return _size; };
   inline int frame() { return _frame; }
 
   private:
-    vector<float> _pos, _cell;
+    vector<double> _cell;
     vector<vertex> _v;                // internal storage of vertices
     vector<int> _typesnum;            // numeric version of atom types
     unordered_set<string> _typeset;
     unsigned _size;
     int _frame, _verb;
     ifstream _f;
-    float _r2max;                      // maximum r^2[A][B] value for loaded types
+    double _r2max;                      // maximum r^2[A][B] value for loaded types
     unordered_map<string,unordered_map<string,float> > r2map;  // precomputed r^2[A][B] cutoffs
-    vector<vector<float> > r2mapnum;   // precomputed r^2[A][B] cutoffs
+    vector<vector<double> > r2mapnum;   // precomputed r^2[A][B] cutoffs
 };
 
 int main(int argc, char** argv) {
@@ -375,6 +410,7 @@ int main(int argc, char** argv) {
   -a <n>  analysis tool : 1=bond lengths, 2=pyramidalization, 3=coordination, 4=neighbours\n\
   -r <x>  set manual cutoff distance (default is hardcoded per specied based on vdW radii)\n\
   -v      increase verbosity level\n\
+  -V <n>  generate n vacancies\n\
   -x      print brief neighboring statistics to stdout\n\
   -h      show this help message\n";
 
@@ -382,13 +418,15 @@ int main(int argc, char** argv) {
   bool lstat=false; // print statistics
   bool lquiet=false;// be quiet
   int  verbs=0;     // verbosity
+  int nvacancies=0; // generate n vacancies
   double rcut=-1;   // manual cutoff
 
-  while ((c = getopt(argc, argv, "a:r:vqxh")) != -1) {
+  while ((c = getopt(argc, argv, "a:r:V:vqxh")) != -1) {
     switch(c) {
       case 'a': analysis=atoi(optarg); break;
       case 'r': rcut=atof(optarg); break;
       case 'v': verbs++; break;
+      case 'V': nvacancies=atoi(optarg); break;
       case 'q': lquiet=!lquiet; break;
       case 'x': lstat=!lstat; break;
       case 'h': fprintf(stderr,"%s",usage.c_str()); return 0;
@@ -410,6 +448,10 @@ int main(int argc, char** argv) {
       case 3: g.stat_coordination(); break;
       case 4: g.stat_neighbours(); break;
       default: fprintf(stderr,"ERROR: unimplented analysis method chosen\n"); return 1; break;
+    }
+    if(nvacancies>0) {
+      g.generate_vacancies(nvacancies);
+      g.write_xyz();
     }
   }
 
