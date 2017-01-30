@@ -274,20 +274,26 @@ struct graph {
   }
 
   void stat_bondlengths() {
-    unsigned i,d,n,m;
+    //unsigned i,d,n,m;
+    unsigned i,d;
     for(i=0; i<_v.size(); i++) {
-      n = _v[i].id;
-      for(auto vj=_v[i].neigh.begin(); vj!= _v[i].neigh.end(); vj++) {
-        m = (*vj)->id;
+      //n = _v[i].id;
+      //printf("n=%d\n",n);
+      auto vi = _v[i];
+      for(auto vj_iter=vi.neigh.begin(); vj_iter!= vi.neigh.end(); vj_iter++) {
+        auto vj = *(*vj_iter); // dereference iterator to pointer
+      //  m = vj.id;
+      //printf("m=%d\n",m);
         double r2 = 0;
         for(d=0; d<3; d++) {
-          double dx = _v[n].X[d] - _v[m].X[d]; 
+          double dx = vi.X[d] - vj.X[d]; 
           dx -= round(dx/_cell[d])*_cell[d]; // periodic boundary conditions
           r2 += dx*dx;
         }
-        if(_verb>1) printf ("%.3f %d %d %d %d\n",sqrt(r2),n,m,_v[n].typenum,_v[m].typenum);
-        else if(_verb==1) printf ("%.3f %d %d\n",sqrt(r2),n,m);
-        else printf ("%.3f\n",sqrt(r2));
+        //if(_verb>1) printf ("%.3f %d %d %d %d\n",sqrt(r2),n,m,vi.typenum,vj.typenum);
+        //else if(_verb==1) printf ("%.3f %d %d\n",sqrt(r2),n,m);
+        //else printf ("%.3f\n",sqrt(r2));
+        printf ("%.3f\n",sqrt(r2));
       }
     }
   }
@@ -352,6 +358,7 @@ struct graph {
     for(int i=0;i<n;i++) {
       uniform_int_distribution<int> distribution(0,_v.size());
       int r = distribution(generator);
+    r = 3;
       bool selected = false;
       while(!selected) {
         selected = true;
@@ -361,10 +368,24 @@ struct graph {
             break;
           }
         }
-        r = distribution(generator);
+        if(!selected) r = distribution(generator);
       }
       for(auto n = _v[r].neigh.begin(); n!=_v[r].neigh.end(); n++) {
-        //*(n->neigh).remove(_v[r]);
+        // remove all links to this vertex before removing the vertex itself
+        //int j=0;
+        fprintf(stderr,"r = %d : n = %d\n",r,(*n)->id);
+        for(auto nn = (*n)->neigh.begin(); nn!=(*n)->neigh.end(); nn++) {
+          if((*nn)->id==r) {
+          //if(nn==_v[r]) { 
+            //printf("REMOVING %d (%d) FROM NEIGHBORS OF %d\n",(*nn)->id,j,(*n)->id);
+            (*n)->neigh.remove(*nn); 
+            break; 
+          }
+          //j++;
+        //*((*n)->neigh).remove(_v.begin()+r);
+        }
+        //(*n)->neigh.remove((*n)->neigh.begin() + j);
+        //  printf("REMOVING %d FROM NEIGHBORS OF %d\n",j,(*n)->id);
       }
       _v.erase(_v.begin()+r);
       _size--;
@@ -411,23 +432,26 @@ int main(int argc, char** argv) {
   -r <x>  set manual cutoff distance (default is hardcoded per specied based on vdW radii)\n\
   -v      increase verbosity level\n\
   -V <n>  generate n vacancies\n\
+  -w      write xyz output\n\
   -x      print brief neighboring statistics to stdout\n\
   -h      show this help message\n";
 
   int  analysis=0;  // analysis tool
   bool lstat=false; // print statistics
   bool lquiet=false;// be quiet
+  bool lwrite=false;// write xyz
   int  verbs=0;     // verbosity
   int nvacancies=0; // generate n vacancies
   double rcut=-1;   // manual cutoff
 
-  while ((c = getopt(argc, argv, "a:r:V:vqxh")) != -1) {
+  while ((c = getopt(argc, argv, "a:r:V:vqwxh")) != -1) {
     switch(c) {
       case 'a': analysis=atoi(optarg); break;
       case 'r': rcut=atof(optarg); break;
       case 'v': verbs++; break;
       case 'V': nvacancies=atoi(optarg); break;
       case 'q': lquiet=!lquiet; break;
+      case 'w': lwrite=!lwrite; break;
       case 'x': lstat=!lstat; break;
       case 'h': fprintf(stderr,"%s",usage.c_str()); return 0;
       default : fprintf(stderr,"%s",usage.c_str()); return 1;
@@ -439,6 +463,8 @@ int main(int argc, char** argv) {
   if(argc-optind<1) {fprintf(stderr,"ERROR: no input file specified.\n"); return 1;};
   graph g(argv[optind],rcut,verbs);      // initialize graph
   while(!g.next()) {                     // loop over frames
+    if(nvacancies>0) g.generate_vacancies(nvacancies);
+    if(lwrite) g.write_xyz();
     if(lstat) g.statistics();    // print statistics
     else if(!lquiet) cout << "#frame " << g.frame() << endl;
     switch(analysis) {
@@ -448,10 +474,6 @@ int main(int argc, char** argv) {
       case 3: g.stat_coordination(); break;
       case 4: g.stat_neighbours(); break;
       default: fprintf(stderr,"ERROR: unimplented analysis method chosen\n"); return 1; break;
-    }
-    if(nvacancies>0) {
-      g.generate_vacancies(nvacancies);
-      g.write_xyz();
     }
   }
 
