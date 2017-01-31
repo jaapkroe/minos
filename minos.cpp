@@ -354,7 +354,6 @@ struct graph {
     struct timespec ts; // fast seed
     clock_gettime(CLOCK_MONOTONIC, &ts);
     unsigned int seed = ts.tv_nsec; // current time in nanoseconds
-    //seed = 12;
     if(_verb) fprintf(stderr,"VACANCIES: SEED = %d\n",seed);
     mt19937 generator(seed); // stdlib Mersenne Twister, 
     for(int i=0;i<nvacancies;i++) {
@@ -404,13 +403,10 @@ struct graph {
         for(; nn_iter!=(*n_iter)->neigh.end(); nn_iter++) {
           if(*nn_iter == &_v[r]) break; 
         }
-        //(*n_iter)->neigh.erase((*n_iter)->neigh.begin()+j); 
         (*n_iter)->neigh.erase(nn_iter);
       }
       _v[r].neigh.clear();
       _v[r].ingraph = false;
-      //_v[r].neigh = NULL;
-      //_v.erase(_v.begin()+r);
       _size--;
     }
   }
