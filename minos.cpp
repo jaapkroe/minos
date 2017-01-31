@@ -350,10 +350,11 @@ struct graph {
     }
   }
 
-  void generate_vacancies(int nvacancies) {
+  void generate_vacancies(int nvacancies, string t) {
     struct timespec ts; // fast seed
     clock_gettime(CLOCK_MONOTONIC, &ts);
     unsigned int seed = ts.tv_nsec; // current time in nanoseconds
+    //seed = 998962097;
     if(_verb) fprintf(stderr,"VACANCIES: SEED = %d\n",seed);
     mt19937 generator(seed); // stdlib Mersenne Twister, 
     for(int i=0;i<nvacancies;i++) {
@@ -373,11 +374,12 @@ struct graph {
         }
         if(!_v[r].ingraph) selected = false;
         if(_v[r].neigh.size()<2) selected = false;
+        if(_v[r].type!=t) selected=false;
         if(!selected) r = distribution(generator);
         if(n>nmax) { fprintf(stderr,"ERROR selecting atom : exceeded maximum tries (%d)\n",nmax); exit(1); };
         n++;
       }
-      if(_verb) fprintf(stderr,"VACANCIES: selected atom %d\n",r);
+      if(_verb) fprintf(stderr,"VACANCIES: selected atom %d (%s)\n",r,_v[r].type.c_str());
       // of those the neighbors of , pick two and move them closer, half the bond length
       uniform_int_distribution<int> pick(0,_v[r].neigh.size()-1);
       int j1 = pick(generator);
@@ -385,10 +387,13 @@ struct graph {
       while(j1==j2) j2 = pick(generator);
       auto n1 = _v[r].neigh[j1];
       auto n2 = _v[r].neigh[j2];
-      if(_verb>1) fprintf(stderr,"VACANCIES: picked j1 and j2 = %d (%d) and %d (%d) for bond formation\n",j1,n1->id,j2,n2->id);
+      if(_verb>1) fprintf(stderr,"VACANCIES: bond formation between %d (%d) and %d (%d)\n",j1,n1->id,j2,n2->id);
       double fraction = 0.146; // bond fraction for move
       for(int d=0; d<3; d++) {
-        double dx = fraction * ( n1->X[d] - n2->X[d] ) ;
+        double dx = n1->X[d] - n2->X[d];
+        dx -= round(dx/_cell[d])*_cell[d]; // periodic boundary conditions
+        dx *= fraction;
+        if(dx*dx>1) { fprintf(stderr,"ERROR : movement too large (%f) direction %d : x1, x2 = %f %f\n",dx,d,n1->X[d],n2->X[d]); exit(1); };
         n1->X[d] -= dx;
         n2->X[d] += dx;
       }
@@ -450,6 +455,7 @@ int main(int argc, char** argv) {
   -r <x>  set manual cutoff distance (default is hardcoded per specied based on vdW radii)\n\
   -v      increase verbosity level\n\
   -V <n>  generate n vacancies\n\
+  -T <s>  set vacancy type\n\
   -w      write xyz output\n\
   -x      print brief neighboring statistics to stdout\n\
   -h      show this help message\n";
@@ -460,14 +466,16 @@ int main(int argc, char** argv) {
   bool lwrite=false;// write xyz
   int  verbs=0;     // verbosity
   int nvacancies=0; // generate n vacancies
+  string tvac = "C";   // vacancy type
   double rcut=-1;   // manual cutoff
 
-  while ((c = getopt(argc, argv, "a:r:V:vqwxh")) != -1) {
+  while ((c = getopt(argc, argv, "a:r:V:T:vqwxh")) != -1) {
     switch(c) {
       case 'a': analysis=atoi(optarg); break;
       case 'r': rcut=atof(optarg); break;
       case 'v': verbs++; break;
       case 'V': nvacancies=atoi(optarg); break;
+      case 'T': tvac=optarg; break;
       case 'q': lquiet=!lquiet; break;
       case 'w': lwrite=!lwrite; break;
       case 'x': lstat=!lstat; break;
@@ -481,7 +489,7 @@ int main(int argc, char** argv) {
   if(argc-optind<1) {fprintf(stderr,"ERROR: no input file specified.\n"); return 1;};
   graph g(argv[optind],rcut,verbs);      // initialize graph
   while(!g.next()) {                     // loop over frames
-    if(nvacancies>0) g.generate_vacancies(nvacancies);
+    if(nvacancies>0) g.generate_vacancies(nvacancies,tvac);
     if(lwrite) g.write_xyz();
     if(lstat) g.statistics();    // print statistics
     else if(!lquiet) cout << "#frame " << g.frame() << endl;
