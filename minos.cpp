@@ -29,17 +29,18 @@ vector<double> radii = {1.5, 1.2, 1.4, 3.40, 2.0, 1.7, 1.7, 1.7, 1.52, 1.47, 1.5
 struct vertex {
   /* the vertex class holds nodes (atoms) with edges (bonds) */
   //vertex() { neigh.reserve(); } // constructor
-  list<vertex*> neigh;
+  vector<vertex*> neigh;
   string type;
   vector<double> X;
   int id, typenum;
+  bool ingraph = true;
 };
 
 struct graph {
   /* the graph class defines the ensemble of vertices and functions that can be applied to them */
   graph(const char* fname, double rcut, int verb) : _verb(verb) { // constructor
     _f.open(fname);
-    if(!_f) { printf("ERROR opening file %s\n",fname); exit(1); };
+    if(!_f) { fprintf(stderr,"ERROR opening file %s\n",fname); exit(1); };
     _cell.resize(3);
     _frame=0;
     precompute_r2map(rcut);
@@ -66,7 +67,6 @@ struct graph {
 
   int next() {               // read next frame
     _v.clear();
-    _typeset.clear();
     _r2max=0;
     if(loadxyz()) return 1;  // check for EOF (no more frames)
     _frame++;
@@ -78,7 +78,6 @@ struct graph {
     string line;
     if(!(_f >> _size)) return 1;                    // read num of atoms (error=EOF!)
     _f.ignore(MAXLINEW, '\n');                      // go to end-of-line
-    _typesnum.clear();
     _v.clear();
     getline(_f,line);                               // second header cell (treat with care)
     stringstream ss(line);
@@ -97,6 +96,7 @@ struct graph {
     if(_verb>1) fprintf(stderr,"CELL = { %20.16g, %20.16g, %20.16g }\n",_cell[0],_cell[1],_cell[2]);
     unsigned ntypes=0, i;
     unordered_map<string, int> map_types_nums;      // map types to a number
+    unordered_set<string> typeset;
     char t[8];
     double x,y,z;
     for(i=0; i<_size; i++) {                        // read coordinates
@@ -109,7 +109,7 @@ struct graph {
       v.type = t;
       v.id = i;
       /* determine unique types */
-      auto res = _typeset.insert(t);        // returns a pair of <iter,bool>
+      auto res = typeset.insert(t);        // returns a pair of <iter,bool>
       if(get<1>(res)) {                     // successful insert,
         map_types_nums[t]=ntypes;           // map: types <-> numeric types
         ntypes++;
@@ -121,12 +121,12 @@ struct graph {
 
     r2mapnum.clear();
     for(unsigned i=0;i<=ntypes;i++) r2mapnum.push_back(vector<double>(ntypes+1));
-    for(auto it=_typeset.begin(); it!=_typeset.end(); ++it ) {
+    for(auto it=typeset.begin(); it!=typeset.end(); ++it ) {
       int i = map_types_nums[*it];
       if(find(elements.begin(),elements.end(),*it)==elements.end()) {
         printf("ERROR : element (%s) unkown\n",it->c_str()); return 2;
       }
-      for(auto jt=_typeset.begin(); jt!=_typeset.end(); ++jt ) {
+      for(auto jt=typeset.begin(); jt!=typeset.end(); ++jt ) {
         int j = map_types_nums[*jt];
         double r2 = r2map[*it][*jt];
         if(r2>_r2max)_r2max=r2;
@@ -243,30 +243,34 @@ struct graph {
 
   void statistics() {
     double nnav = 0;
-    unsigned i, len;
+    unsigned i, len, n=0;
     vector<int> hist(3);
     for(i=0; i<_v.size(); i++) {
+      if(!_v[i].ingraph) continue;
       len = _v[i].neigh.size();
       nnav += len;
       if(len>hist.size()-1) hist.resize(len+1);
       hist[len]++;
+      n++;
     }
-    printf("%4d %.4f : ",_frame,nnav/double(_v.size()));
+    printf("%4d %.4f : ",_frame,nnav/n);
     for(i=0; i<hist.size(); i++) printf("%6d ",hist[i]);
     printf("\n");
   }
 
   void stat_neighbours() {
-    for(unsigned i=0; i<_v.size(); i++) {
-      printf("%d :",i);
-      for(auto vj=_v[i].neigh.begin(); vj!=_v[i].neigh.end(); vj++) 
-        printf(" %d",(*vj)->id);
+    for(auto vi = _v.begin(); vi != _v.end(); vi++) {
+      if(!vi->ingraph) continue;
+      printf("%d :",vi->id);
+      for(auto vj_iter=vi->neigh.begin(); vj_iter!=vi->neigh.end(); vj_iter++) 
+        printf(" %d",(*vj_iter)->id);
       printf("\n");
     }
   }
 
   void stat_coordination() {
     for(unsigned i=0; i<_v.size(); i++) {
+      if(!_v[i].ingraph) continue;
       unsigned n = _v[i].id;
       unsigned nn = _v[i].neigh.size();
       printf("%-5d %d\n",n,nn);
@@ -274,26 +278,22 @@ struct graph {
   }
 
   void stat_bondlengths() {
-    //unsigned i,d,n,m;
-    unsigned i,d;
+    unsigned i,d,n,m;
     for(i=0; i<_v.size(); i++) {
-      //n = _v[i].id;
-      //printf("n=%d\n",n);
+      n = _v[i].id;
       auto vi = _v[i];
       for(auto vj_iter=vi.neigh.begin(); vj_iter!= vi.neigh.end(); vj_iter++) {
         auto vj = *(*vj_iter); // dereference iterator to pointer
-      //  m = vj.id;
-      //printf("m=%d\n",m);
+        m = vj.id;
         double r2 = 0;
         for(d=0; d<3; d++) {
           double dx = vi.X[d] - vj.X[d]; 
           dx -= round(dx/_cell[d])*_cell[d]; // periodic boundary conditions
           r2 += dx*dx;
         }
-        //if(_verb>1) printf ("%.3f %d %d %d %d\n",sqrt(r2),n,m,vi.typenum,vj.typenum);
-        //else if(_verb==1) printf ("%.3f %d %d\n",sqrt(r2),n,m);
-        //else printf ("%.3f\n",sqrt(r2));
-        printf ("%.3f\n",sqrt(r2));
+        if(_verb>1) printf ("%.3f %5d %5d %5d %5d\n",sqrt(r2),n,m,vi.typenum,vj.typenum);
+        else if(_verb==1) printf ("%.3f %5d %5d\n",sqrt(r2),n,m);
+        else printf ("%.3f\n",sqrt(r2));
       }
     }
   }
@@ -350,52 +350,76 @@ struct graph {
     }
   }
 
-  void generate_vacancies(int n) {
+  void generate_vacancies(int nvacancies) {
     struct timespec ts; // fast seed
     clock_gettime(CLOCK_MONOTONIC, &ts);
     unsigned int seed = ts.tv_nsec; // current time in nanoseconds
+    //seed = 12;
+    if(_verb) fprintf(stderr,"VACANCIES: SEED = %d\n",seed);
     mt19937 generator(seed); // stdlib Mersenne Twister, 
-    for(int i=0;i<n;i++) {
-      uniform_int_distribution<int> distribution(0,_v.size());
+    for(int i=0;i<nvacancies;i++) {
+      uniform_int_distribution<int> distribution(0,_v.size()-1);
       int r = distribution(generator);
-    r = 3;
       bool selected = false;
+      int n=0, nmax=50;
       while(!selected) {
         selected = true;
-        for(auto n = _v[r].neigh.begin(); n!=_v[r].neigh.end(); n++) {
-          if((*n)->neigh.size()<3) { 
+        // remove an atom where each neighbor is at least 3-coordinated 
+        // so as not to leave an 1-coordinated atoms behind
+        for(auto n_iter=_v[r].neigh.begin(); n_iter!=_v[r].neigh.end(); n_iter++) {
+          if((*n_iter)->neigh.size()!=3) { 
             selected = false;
             break;
           }
         }
+        if(!_v[r].ingraph) selected = false;
+        if(_v[r].neigh.size()<2) selected = false;
         if(!selected) r = distribution(generator);
+        if(n>nmax) { fprintf(stderr,"ERROR selecting atom : exceeded maximum tries (%d)\n",nmax); exit(1); };
+        n++;
       }
-      for(auto n = _v[r].neigh.begin(); n!=_v[r].neigh.end(); n++) {
-        // remove all links to this vertex before removing the vertex itself
-        //int j=0;
-        fprintf(stderr,"r = %d : n = %d\n",r,(*n)->id);
-        for(auto nn = (*n)->neigh.begin(); nn!=(*n)->neigh.end(); nn++) {
-          if((*nn)->id==r) {
-          //if(nn==_v[r]) { 
-            //printf("REMOVING %d (%d) FROM NEIGHBORS OF %d\n",(*nn)->id,j,(*n)->id);
-            (*n)->neigh.remove(*nn); 
-            break; 
-          }
-          //j++;
-        //*((*n)->neigh).remove(_v.begin()+r);
+      if(_verb) fprintf(stderr,"VACANCIES: selected atom %d\n",r);
+      // of those the neighbors of , pick two and move them closer, half the bond length
+      uniform_int_distribution<int> pick(0,_v[r].neigh.size()-1);
+      int j1 = pick(generator);
+      int j2 = pick(generator);
+      while(j1==j2) j2 = pick(generator);
+      auto n1 = _v[r].neigh[j1];
+      auto n2 = _v[r].neigh[j2];
+      if(_verb>1) fprintf(stderr,"VACANCIES: picked j1 and j2 = %d (%d) and %d (%d) for bond formation\n",j1,n1->id,j2,n2->id);
+      double fraction = 0.146; // bond fraction for move
+      for(int d=0; d<3; d++) {
+        double dx = fraction * ( n1->X[d] - n2->X[d] ) ;
+        n1->X[d] -= dx;
+        n2->X[d] += dx;
+      }
+      // now we "remove" the vertex : 
+      // in reality we just clear it from neighbor lists (remove pointers) and set 'ingraph' to false
+      // this avoids dirty pointer business
+      // if we simply erase _v[r], it will not only call the destructor on this element but also move all 
+      // other elements which is (1) slow and (2) confusion, because now further down in memory are shifted 
+      for(auto n_iter = _v[r].neigh.begin(); n_iter!=_v[r].neigh.end(); n_iter++) {
+        // remove links to this vertex before removing the vertex itself
+        auto nn_iter = (*n_iter)->neigh.begin();
+        for(; nn_iter!=(*n_iter)->neigh.end(); nn_iter++) {
+          if(*nn_iter == &_v[r]) break; 
         }
-        //(*n)->neigh.remove((*n)->neigh.begin() + j);
-        //  printf("REMOVING %d FROM NEIGHBORS OF %d\n",j,(*n)->id);
+        //(*n_iter)->neigh.erase((*n_iter)->neigh.begin()+j); 
+        (*n_iter)->neigh.erase(nn_iter);
       }
-      _v.erase(_v.begin()+r);
+      _v[r].neigh.clear();
+      _v[r].ingraph = false;
+      //_v[r].neigh = NULL;
+      //_v.erase(_v.begin()+r);
       _size--;
     }
   }
 
   void write_xyz() {
-    printf("%ld\n%.5f %.5f %.5f\n",_v.size(),_cell[0],_cell[1],_cell[2]);
+    printf("%d\n%.5f %.5f %.5f\n",_size,_cell[0],_cell[1],_cell[2]);
     for(auto vi = _v.begin(); vi!=_v.end(); vi++) { 
-      printf("%-2s % 19.10f % 19.10f % 19.10f\n", vi->type.c_str(), vi->X[0], vi->X[1], vi->X[2]);
+      if(vi->ingraph)
+        printf("%-2s % 19.10f % 19.10f % 19.10f\n", vi->type.c_str(), vi->X[0], vi->X[1], vi->X[2]);
     }
   }
 
@@ -405,10 +429,8 @@ struct graph {
   private:
     vector<double> _cell;
     vector<vertex> _v;                // internal storage of vertices
-    vector<int> _typesnum;            // numeric version of atom types
-    unordered_set<string> _typeset;
-    unsigned _size;
     int _frame, _verb;
+    unsigned _size;
     ifstream _f;
     double _r2max;                      // maximum r^2[A][B] value for loaded types
     unordered_map<string,unordered_map<string,float> > r2map;  // precomputed r^2[A][B] cutoffs
